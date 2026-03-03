@@ -657,12 +657,26 @@
         );
       }
 
-      async function formatPromptForChat(messages, enableThinking) {
-        if (!enableThinking) {
-          return await state.model.formatChat(messages, true);
+      function buildNonThinkingTemplate(baseTemplate) {
+        if (!baseTemplate || typeof baseTemplate !== "string") {
+          return null;
         }
+        const blockPattern =
+          /{%- if enable_thinking is defined and enable_thinking is true %}[\s\S]*?{%- endif %}/;
+        if (!blockPattern.test(baseTemplate)) {
+          return null;
+        }
+        return baseTemplate.replace(
+          blockPattern,
+          "{{- '<think>\\n\\n</think>\\n\\n' }}"
+        );
+      }
+
+      async function formatPromptForChat(messages, enableThinking) {
         const baseTemplate = state.model.getChatTemplate?.() || null;
-        const patchedTemplate = buildThinkingTemplate(baseTemplate);
+        const patchedTemplate = enableThinking
+          ? buildThinkingTemplate(baseTemplate)
+          : buildNonThinkingTemplate(baseTemplate);
         if (!patchedTemplate) {
           if (!state.thinkingTemplateWarningShown) {
             pushNativeLog("warn", [
@@ -672,6 +686,10 @@
           }
           return await state.model.formatChat(messages, true);
         }
+        pushNativeLog("debug", [
+          "chat mode:",
+          enableThinking ? "thinking" : "non-thinking",
+        ]);
         return await state.model.formatChat(messages, true, patchedTemplate);
       }
 
