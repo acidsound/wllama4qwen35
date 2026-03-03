@@ -9,6 +9,10 @@ Date baseline: `2026-03-03`.
 - Demo URL: `https://wllama4qwen35.vercel.app`
 
 This is the recommended way to test the web app in browser.
+The Vercel deployment is configured with:
+
+- `Cross-Origin-Opener-Policy: same-origin`
+- `Cross-Origin-Embedder-Policy: require-corp`
 
 ## What is included
 
@@ -121,6 +125,9 @@ Always use `.../resolve/main/...` URLs, not `.../blob/...`.
 ## Threading and runtime notes
 
 - Multi-thread may fall back to single-thread depending on browser/environment.
+- The app shows runtime info in `envText` after model load:
+  - `runtime=multi-thread (N)` or `runtime=single-thread (N)`
+  - plus `crossOriginIsolated` and hardware thread count.
 - Expected warning:
   `Multi-threads are not supported in this environment, falling back to single-thread`
 - On load error like `Invalid typed array length ...`, try:

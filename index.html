@@ -472,6 +472,34 @@
         dom.enableThinking.disabled = state.generating;
       }
 
+      function updateEnvText() {
+        const hwThreads = navigator.hardwareConcurrency || "n/a";
+        const base =
+          "crossOriginIsolated=" +
+          String(window.crossOriginIsolated) +
+          " | hwThreads=" +
+          String(hwThreads);
+
+        if (!state.loaded || !state.model) {
+          dom.envText.textContent = base + " | runtime=not-loaded";
+          return;
+        }
+
+        try {
+          const isMulti = state.model.isMultithread();
+          const runtimeThreads = state.model.getNumThreads();
+          dom.envText.textContent =
+            base +
+            " | runtime=" +
+            (isMulti ? "multi-thread" : "single-thread") +
+            " (" +
+            String(runtimeThreads) +
+            ")";
+        } catch {
+          dom.envText.textContent = base + " | runtime=unknown";
+        }
+      }
+
       function syncPresetFromModelUrl() {
         const currentUrl = dom.modelUrl.value.trim();
         const matched = Array.from(dom.modelPreset.options).some(
@@ -563,7 +591,9 @@
 
         try {
           state.generating = true;
+          state.loaded = false;
           syncUiState();
+          updateEnvText();
           setStatus("Initializing runtime...");
           setLoadingProgress(0);
 
@@ -610,11 +640,13 @@
           });
 
           state.loaded = true;
+          updateEnvText();
           setLoadingProgress(100);
           setStatus("Model loaded. Ready to chat.");
         } catch (error) {
           console.error(error);
           state.loaded = false;
+          updateEnvText();
           const baseMessage = error?.message || String(error);
           const hints = [];
           if (baseMessage.includes("Invalid typed array length")) {
@@ -745,11 +777,7 @@
         }
       });
 
-      dom.envText.textContent =
-        "crossOriginIsolated=" +
-        String(window.crossOriginIsolated) +
-        " | threads=" +
-        String(navigator.hardwareConcurrency || "n/a");
+      updateEnvText();
       syncPresetFromModelUrl();
       syncUiState();
       setStatus("Idle");
