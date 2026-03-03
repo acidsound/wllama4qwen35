@@ -215,6 +215,14 @@
         line-height: 1.42;
       }
 
+      .ctx-meta {
+        margin-top: 4px;
+        font-size: 0.7rem;
+        color: #4b5f54;
+        opacity: 0.88;
+        font-family: var(--font-mono);
+      }
+
       .msg .who {
         font-size: 0.76rem;
         margin-bottom: 4px;
@@ -385,10 +393,19 @@
         model: null,
         loaded: false,
         generating: false,
+        abortController: null,
+        pendingIndicatorTimer: null,
         history: [],
         nativeLogs: [],
         thinkingTemplateWarningShown: false,
       };
+
+      const waitingMessages = [
+        "Thinking",
+        "Cooking",
+        "Connecting ideas",
+        "Drafting response",
+      ];
 
       const pathConfig = {
         "single-thread/wllama.wasm": "./single-thread/wllama.wasm",
@@ -465,11 +482,89 @@
       }
 
       function syncUiState() {
-        const canSend = state.loaded && !state.generating;
-        dom.sendBtn.disabled = !canSend;
-        dom.userInput.disabled = !canSend;
+        const canStop = state.generating && state.loaded;
+        dom.sendBtn.disabled = !state.loaded;
+        dom.sendBtn.textContent = canStop ? "Stop" : "Send";
+        dom.sendBtn.classList.toggle("primary", !canStop);
+        dom.sendBtn.classList.toggle("ghost", canStop);
+        dom.userInput.disabled = !state.loaded;
         dom.loadBtn.disabled = state.generating;
         dom.enableThinking.disabled = state.generating;
+      }
+
+      function startPendingIndicator(bubble) {
+        stopPendingIndicator();
+        const base =
+          waitingMessages[Math.floor(Math.random() * waitingMessages.length)];
+        let step = 1;
+        bubble.textContent = base + ".";
+        state.pendingIndicatorTimer = window.setInterval(() => {
+          step = (step % 3) + 1;
+          bubble.textContent = base + ".".repeat(step);
+          scrollChatToBottom();
+        }, 450);
+      }
+
+      function stopPendingIndicator() {
+        if (state.pendingIndicatorTimer) {
+          clearInterval(state.pendingIndicatorTimer);
+          state.pendingIndicatorTimer = null;
+        }
+      }
+
+      function stopGeneration() {
+        if (!state.generating || !state.abortController) {
+          return;
+        }
+        if (!state.abortController.signal.aborted) {
+          state.abortController.abort();
+          setStatus("Stopping response...");
+        }
+      }
+
+      async function getCtxUsageText() {
+        if (!state.loaded || !state.model) {
+          return null;
+        }
+        try {
+          const info = state.model.getLoadedContextInfo?.() || {};
+          const totalCtx = Number(info.n_ctx || 0);
+          const cached = await state.model.getCachedTokens();
+          const usedCtx = Array.isArray(cached) ? cached.length : 0;
+          if (!Number.isFinite(totalCtx) || totalCtx <= 0) {
+            return "ctx used " + String(usedCtx);
+          }
+          const leftCtx = Math.max(0, totalCtx - usedCtx);
+          const leftPct = ((leftCtx / totalCtx) * 100).toFixed(1);
+          return (
+            "ctx: used " +
+            String(usedCtx) +
+            " / " +
+            String(totalCtx) +
+            " | left " +
+            String(leftCtx) +
+            " (" +
+            String(leftPct) +
+            "%)"
+          );
+        } catch {
+          return null;
+        }
+      }
+
+      async function attachAssistantCtxMeta(bubble) {
+        const text = await getCtxUsageText();
+        if (!text || !bubble || !bubble.parentElement) {
+          return;
+        }
+        const wrap = bubble.parentElement;
+        let meta = wrap.querySelector(".ctx-meta");
+        if (!meta) {
+          meta = document.createElement("div");
+          meta.className = "ctx-meta";
+          wrap.appendChild(meta);
+        }
+        meta.textContent = text;
       }
 
       function updateEnvText() {
@@ -684,7 +779,9 @@
         state.history.push({ role: "user", content: userText });
 
         const assistantBubble = renderMessage("assistant", "");
+        startPendingIndicator(assistantBubble);
         state.generating = true;
+        state.abortController = new AbortController();
         syncUiState();
         setStatus(
           "Generating... (thinking " + (enableThinking ? "on" : "off") + ")"
@@ -693,6 +790,7 @@
         try {
           const toolResult = tryToolCallFromUserText(userText);
           if (toolResult) {
+            stopPendingIndicator();
             const toolText =
               "[tool:get_current_time]\n" +
               toolResult.formatted +
@@ -702,6 +800,7 @@
               toolResult.iso;
             assistantBubble.textContent = toolText;
             state.history.push({ role: "assistant", content: toolText });
+            await attachAssistantCtxMeta(assistantBubble);
             setStatus("Tool executed: get_current_time");
             return;
           }
@@ -724,13 +823,32 @@
             },
             stream: true,
             useCache: true,
+            abortSignal: state.abortController.signal,
           });
 
           let finalText = "";
+          let gotFirstToken = false;
           for await (const chunk of chunks) {
+            if (!gotFirstToken) {
+              gotFirstToken = true;
+              stopPendingIndicator();
+            }
             finalText = chunk.currentText ?? finalText;
             assistantBubble.textContent = finalText;
             scrollChatToBottom();
+          }
+
+          stopPendingIndicator();
+
+          if (state.abortController.signal.aborted) {
+            if (!finalText) {
+              finalText = "(stopped)";
+              assistantBubble.textContent = finalText;
+            }
+            state.history.push({ role: "assistant", content: finalText });
+            await attachAssistantCtxMeta(assistantBubble);
+            setStatus("Stopped.");
+            return;
           }
 
           if (!finalText) {
@@ -739,14 +857,26 @@
           }
 
           state.history.push({ role: "assistant", content: finalText });
+          await attachAssistantCtxMeta(assistantBubble);
           setStatus("Ready.");
         } catch (error) {
+          stopPendingIndicator();
+          if (state.abortController?.signal?.aborted) {
+            if (!assistantBubble.textContent.trim()) {
+              assistantBubble.textContent = "(stopped)";
+            }
+            await attachAssistantCtxMeta(assistantBubble);
+            setStatus("Stopped.");
+            return;
+          }
           console.error(error);
           const msg = "Generation failed: " + (error?.message || String(error));
           assistantBubble.textContent = msg;
           setStatus(msg);
         } finally {
+          stopPendingIndicator();
           state.generating = false;
+          state.abortController = null;
           syncUiState();
           dom.userInput.focus();
         }
@@ -759,7 +889,13 @@
       }
 
       dom.loadBtn.addEventListener("click", loadModel);
-      dom.sendBtn.addEventListener("click", sendMessage);
+      dom.sendBtn.addEventListener("click", () => {
+        if (state.generating) {
+          stopGeneration();
+        } else {
+          sendMessage();
+        }
+      });
       dom.resetBtn.addEventListener("click", resetChat);
       dom.modelPreset.addEventListener("change", () => {
         if (!dom.modelPreset.value) {
@@ -773,7 +909,11 @@
       dom.userInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
           event.preventDefault();
-          sendMessage();
+          if (state.generating) {
+            stopGeneration();
+          } else {
+            sendMessage();
+          }
         }
       });
 
