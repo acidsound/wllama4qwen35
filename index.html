@@ -1,0 +1,759 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Qwen3.5 Chat Playground</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --font-ui: "Noto Sans KR", sans-serif;
+        --font-mono: "IBM Plex Mono", monospace;
+        --bg: #f4f6ef;
+        --panel: #fefcf4;
+        --ink: #1c2a1f;
+        --muted: #5a665f;
+        --line: #c3d2c6;
+        --accent: #1f6f4a;
+        --accent-soft: #d8ede1;
+        --user: #103c8b;
+        --user-soft: #dbe8ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font-ui);
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 85% 15%, #e3f2d9 0 14%, transparent 15%),
+          radial-gradient(circle at 8% 88%, #d9eef6 0 20%, transparent 21%),
+          linear-gradient(140deg, #edf0e2 0%, #f4f6ef 42%, #f2f0e8 100%);
+      }
+
+      .shell {
+        width: min(1040px, 94vw);
+        margin: 22px auto;
+        border: 1px solid #a7bcae;
+        border-radius: 20px;
+        overflow: hidden;
+        background: var(--panel);
+        box-shadow: 0 18px 40px rgba(24, 47, 31, 0.12);
+      }
+
+      header {
+        padding: 18px 20px;
+        background: linear-gradient(90deg, #e7efda, #f3f6e6 42%, #f7eee0);
+        border-bottom: 1px solid var(--line);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.15rem;
+        letter-spacing: 0.2px;
+      }
+
+      .sub {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 330px 1fr;
+      }
+
+      .config {
+        border-right: 1px solid var(--line);
+        background: #f8fbf2;
+        padding: 14px;
+      }
+
+      .chat {
+        display: grid;
+        grid-template-rows: 1fr auto;
+        min-height: 72vh;
+      }
+
+      label {
+        display: block;
+        margin: 10px 0 6px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+
+      input:not([type="checkbox"]),
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid #a5bbb0;
+        border-radius: 10px;
+        background: #fffef7;
+        padding: 10px;
+        font-size: 0.92rem;
+        color: var(--ink);
+        font-family: var(--font-ui);
+        outline: none;
+      }
+
+      textarea {
+        font-family: var(--font-mono);
+        resize: vertical;
+      }
+
+      input:not([type="checkbox"]):focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(31, 111, 74, 0.14);
+      }
+
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+        font-size: 0.84rem;
+        color: #355043;
+      }
+
+      .toggle input[type="checkbox"] {
+        width: auto;
+        accent-color: var(--accent);
+      }
+
+      .status {
+        margin-top: 10px;
+        padding: 10px;
+        border: 1px dashed #b8cabf;
+        border-radius: 10px;
+        background: #fbfff9;
+      }
+
+      code {
+        font-family: inherit;
+      }
+
+      progress {
+        width: 100%;
+        height: 12px;
+        margin-top: 8px;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      button {
+        border: 1px solid transparent;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.12s ease, opacity 0.12s ease;
+      }
+
+      button:hover:enabled {
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
+      .primary {
+        background: var(--accent);
+        color: #f4fff9;
+      }
+
+      .ghost {
+        background: #edf4e8;
+        color: #2b4538;
+        border-color: #a7bcaf;
+      }
+
+      .chat-log {
+        overflow-y: auto;
+        padding: 14px 14px 8px;
+        font-family: var(--font-mono);
+        background:
+          linear-gradient(
+            to bottom,
+            rgba(246, 251, 241, 0.45),
+            rgba(255, 255, 255, 0.3)
+          );
+      }
+
+      #chatLog {
+        font-family: var(--font-mono);
+      }
+
+      .msg {
+        margin-bottom: 12px;
+        max-width: 92%;
+      }
+
+      .bubble {
+        border-radius: 14px;
+        padding: 10px 12px;
+        white-space: pre-wrap;
+        line-height: 1.42;
+      }
+
+      .msg .who {
+        font-size: 0.76rem;
+        margin-bottom: 4px;
+        font-weight: 700;
+        letter-spacing: 0.35px;
+      }
+
+      .msg.user {
+        margin-left: auto;
+      }
+
+      .msg.user .who {
+        text-align: right;
+        color: #1b417e;
+      }
+
+      .msg.user .bubble {
+        background: var(--user-soft);
+        border: 1px solid #a7c0ea;
+      }
+
+      .msg.assistant .who {
+        color: #2b5f43;
+      }
+
+      .msg.assistant .bubble {
+        background: var(--accent-soft);
+        border: 1px solid #9ebea8;
+      }
+
+      .composer {
+        border-top: 1px solid var(--line);
+        background: #f8fbf2;
+        padding: 10px;
+      }
+
+      .hint {
+        margin-top: 10px;
+        font-size: 0.8rem;
+        color: #55655e;
+        line-height: 1.4;
+      }
+
+      .meta {
+        margin-top: 8px;
+        font-size: 0.74rem;
+        color: #4a5c53;
+      }
+
+      @media (max-width: 920px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .config {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <h1>Qwen3.5 Chat Playground</h1>
+        <div class="sub">Load model in browser and verify chat in one page.</div>
+      </header>
+      <section class="grid">
+        <aside class="config">
+          <label for="modelUrl">Model URL</label>
+          <input
+            id="modelUrl"
+            type="text"
+            value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q3_K_S.gguf"
+          />
+
+          <label for="modelPreset">Quick Preset</label>
+          <select id="modelPreset">
+            <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q3_K_S.gguf">
+              Fast / low RAM (Q3_K_S, ~441MB)
+            </option>
+            <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf">
+              Balanced (Q4_K_M, ~533MB)
+            </option>
+            <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q5_K_M.gguf">
+              Higher quality (Q5_K_M, ~590MB)
+            </option>
+            <option value="">Custom URL (manual)</option>
+          </select>
+
+          <label for="systemPrompt">System Prompt</label>
+          <textarea id="systemPrompt" rows="3">You are a helpful assistant.</textarea>
+
+          <label for="nCtx">Context Size (n_ctx)</label>
+          <input id="nCtx" type="number" min="256" step="256" value="512" />
+
+          <label for="nBatch">Batch Size (n_batch)</label>
+          <input id="nBatch" type="number" min="16" step="16" value="64" />
+
+          <label class="toggle" for="enableThinking">
+            <input id="enableThinking" type="checkbox" />
+            Enable thinking mode
+          </label>
+
+          <div class="row">
+            <button id="loadBtn" class="primary">Load Model</button>
+            <button id="resetBtn" class="ghost">Reset Chat</button>
+          </div>
+
+          <div class="status">
+            <div id="statusText"><code>Idle</code></div>
+            <progress id="loadProgress" max="100" value="0"></progress>
+            <div class="meta" id="envText"></div>
+            <textarea
+              id="nativeLog"
+              rows="8"
+              readonly
+              style="margin-top:8px; background:#f9fff8;"
+            ></textarea>
+          </div>
+
+          <div class="hint">
+            Tool demo: ask <code>what time is it?</code> or <code>time now in Asia/Seoul</code><br />
+            The page runs local JS tool <code>get_current_time</code> for verification.<br />
+            You can toggle <code>thinking mode</code> before sending messages.
+          </div>
+        </aside>
+
+        <section class="chat">
+          <div id="chatLog" class="chat-log"></div>
+          <div class="composer">
+            <label for="userInput">Message</label>
+            <textarea
+              id="userInput"
+              rows="3"
+              placeholder="Type and press Ctrl+Enter, or click Send..."
+            ></textarea>
+            <div class="row">
+              <button id="sendBtn" class="primary" disabled>Send</button>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module">
+      import { Wllama } from "./vendor/wllama.local.esm.js";
+
+      const dom = {
+        modelUrl: document.getElementById("modelUrl"),
+        modelPreset: document.getElementById("modelPreset"),
+        systemPrompt: document.getElementById("systemPrompt"),
+        nCtx: document.getElementById("nCtx"),
+        nBatch: document.getElementById("nBatch"),
+        enableThinking: document.getElementById("enableThinking"),
+        loadBtn: document.getElementById("loadBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        statusText: document.getElementById("statusText"),
+        loadProgress: document.getElementById("loadProgress"),
+        envText: document.getElementById("envText"),
+        nativeLog: document.getElementById("nativeLog"),
+        chatLog: document.getElementById("chatLog"),
+        userInput: document.getElementById("userInput"),
+        sendBtn: document.getElementById("sendBtn"),
+      };
+
+      const state = {
+        model: null,
+        loaded: false,
+        generating: false,
+        history: [],
+        nativeLogs: [],
+        thinkingTemplateWarningShown: false,
+      };
+
+      const pathConfig = {
+        "single-thread/wllama.wasm": "./single-thread/wllama.wasm",
+        "multi-thread/wllama.wasm": "./multi-thread/wllama.wasm",
+      };
+
+      function setStatus(message) {
+        dom.statusText.innerHTML = "<code>" + escapeHtml(message) + "</code>";
+      }
+
+      function pushNativeLog(level, args) {
+        const text = args
+          .map((v) => {
+            if (typeof v === "string") return v;
+            try {
+              return JSON.stringify(v);
+            } catch {
+              return String(v);
+            }
+          })
+          .join(" ");
+        state.nativeLogs.push({ level, text });
+        if (state.nativeLogs.length > 80) {
+          state.nativeLogs.shift();
+        }
+        dom.nativeLog.value = state.nativeLogs
+          .slice(-40)
+          .map((x) => "[" + x.level + "] " + x.text)
+          .join("\n");
+        dom.nativeLog.scrollTop = dom.nativeLog.scrollHeight;
+      }
+
+      function getRecentNativeErrors(limit = 8) {
+        return state.nativeLogs
+          .filter((x) => x.level === "error" || x.level === "warn")
+          .slice(-limit)
+          .map((x) => "[" + x.level + "] " + x.text);
+      }
+
+      function setLoadingProgress(value) {
+        dom.loadProgress.value = Math.max(0, Math.min(100, value));
+      }
+
+      function escapeHtml(s) {
+        return s
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function scrollChatToBottom() {
+        dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
+      }
+
+      function renderMessage(role, content) {
+        const wrap = document.createElement("article");
+        wrap.className = "msg " + role;
+
+        const who = document.createElement("div");
+        who.className = "who";
+        who.textContent = role === "user" ? "USER" : "ASSISTANT";
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = content;
+
+        wrap.appendChild(who);
+        wrap.appendChild(bubble);
+        dom.chatLog.appendChild(wrap);
+        scrollChatToBottom();
+        return bubble;
+      }
+
+      function syncUiState() {
+        const canSend = state.loaded && !state.generating;
+        dom.sendBtn.disabled = !canSend;
+        dom.userInput.disabled = !canSend;
+        dom.loadBtn.disabled = state.generating;
+        dom.enableThinking.disabled = state.generating;
+      }
+
+      function syncPresetFromModelUrl() {
+        const currentUrl = dom.modelUrl.value.trim();
+        const matched = Array.from(dom.modelPreset.options).some(
+          (opt) => opt.value && opt.value === currentUrl
+        );
+        dom.modelPreset.value = matched ? currentUrl : "";
+      }
+
+      function runGetCurrentTimeTool(args = {}) {
+        const fallbackZone =
+          Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        const timeZone = args.timeZone || fallbackZone;
+        const now = new Date();
+        const formatted = new Intl.DateTimeFormat("ko-KR", {
+          timeZone,
+          dateStyle: "full",
+          timeStyle: "long",
+          hour12: false,
+        }).format(now);
+        return {
+          tool: "get_current_time",
+          timeZone,
+          iso: now.toISOString(),
+          formatted,
+        };
+      }
+
+      function tryToolCallFromUserText(text) {
+        const asksTimeEn =
+          /(what\s+time|current\s+time|time\s+now|tell me.*time)/i.test(text);
+        const asksTimeKo = [
+          "\uC9C0\uAE08",
+          "\uBA87 \uC2DC",
+          "\uD604\uC7AC \uC2DC\uAC04",
+          "\uC2DC\uAC04 \uC54C\uB824",
+        ].some((kw) => text.includes(kw));
+        const asksTime = asksTimeEn || asksTimeKo;
+        if (!asksTime) {
+          return null;
+        }
+        const zoneMatch = text.match(
+          /(Asia\/Seoul|Asia\/Tokyo|America\/New_York|America\/Los_Angeles|UTC)/i
+        );
+        const timeZone = zoneMatch ? zoneMatch[1] : undefined;
+        return runGetCurrentTimeTool({ timeZone });
+      }
+
+      function buildThinkingTemplate(baseTemplate) {
+        if (!baseTemplate || typeof baseTemplate !== "string") {
+          return null;
+        }
+        const blockPattern =
+          /{%- if enable_thinking is defined and enable_thinking is true %}[\s\S]*?{%- endif %}/;
+        if (!blockPattern.test(baseTemplate)) {
+          return null;
+        }
+        return baseTemplate.replace(
+          blockPattern,
+          "{{- '<think>\\n' }}"
+        );
+      }
+
+      async function formatPromptForChat(messages, enableThinking) {
+        if (!enableThinking) {
+          return await state.model.formatChat(messages, true);
+        }
+        const baseTemplate = state.model.getChatTemplate?.() || null;
+        const patchedTemplate = buildThinkingTemplate(baseTemplate);
+        if (!patchedTemplate) {
+          if (!state.thinkingTemplateWarningShown) {
+            pushNativeLog("warn", [
+              "Thinking template patch was not applied; using default chat template.",
+            ]);
+            state.thinkingTemplateWarningShown = true;
+          }
+          return await state.model.formatChat(messages, true);
+        }
+        return await state.model.formatChat(messages, true, patchedTemplate);
+      }
+
+      async function loadModel() {
+        const modelUrl = dom.modelUrl.value.trim();
+        const nCtx = Number.parseInt(dom.nCtx.value, 10) || 1024;
+        const nBatch = Number.parseInt(dom.nBatch.value, 10) || 64;
+        if (!modelUrl) {
+          setStatus("Model URL is empty.");
+          return;
+        }
+
+        try {
+          state.generating = true;
+          syncUiState();
+          setStatus("Initializing runtime...");
+          setLoadingProgress(0);
+
+          if (state.model) {
+            await state.model.exit();
+          }
+
+          state.nativeLogs = [];
+          dom.nativeLog.value = "";
+          const nativeLogger = {
+            debug: (...args) => {
+              console.debug(...args);
+              pushNativeLog("debug", args);
+            },
+            log: (...args) => {
+              console.log(...args);
+              pushNativeLog("log", args);
+            },
+            warn: (...args) => {
+              console.warn(...args);
+              pushNativeLog("warn", args);
+            },
+            error: (...args) => {
+              console.error(...args);
+              pushNativeLog("error", args);
+            },
+          };
+
+          state.model = new Wllama(pathConfig, {
+            logger: nativeLogger,
+            suppressNativeLog: false,
+          });
+          const nThreads = Math.max(1, Math.min(8, navigator.hardwareConcurrency || 4));
+
+          await state.model.loadModelFromUrl(modelUrl, {
+            n_ctx: nCtx,
+            n_batch: nBatch,
+            n_threads: nThreads,
+            progressCallback: ({ loaded, total }) => {
+              const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
+              setLoadingProgress(percent);
+              setStatus("Downloading model... " + percent + "%");
+            },
+          });
+
+          state.loaded = true;
+          setLoadingProgress(100);
+          setStatus("Model loaded. Ready to chat.");
+        } catch (error) {
+          console.error(error);
+          state.loaded = false;
+          const baseMessage = error?.message || String(error);
+          const hints = [];
+          if (baseMessage.includes("Invalid typed array length")) {
+            hints.push(
+              "native action failed before response decode (often OOM / model load failure)."
+            );
+          }
+          if (modelUrl.includes("/blob/")) {
+            hints.push("use /resolve/main/... URL instead of /blob/.");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          const nativeErr = getRecentNativeErrors(6);
+          const detail = nativeErr.length ? " | " + nativeErr.join(" || ") : "";
+          setStatus(
+            "Load failed: " +
+              baseMessage +
+              (hints.length ? " | hint: " + hints.join(" ") : "") +
+              detail
+          );
+        } finally {
+          state.generating = false;
+          syncUiState();
+        }
+      }
+
+      async function sendMessage() {
+        const userText = dom.userInput.value.trim();
+        if (!state.loaded || !userText || state.generating) {
+          return;
+        }
+        const enableThinking = !!dom.enableThinking.checked;
+
+        dom.userInput.value = "";
+        renderMessage("user", userText);
+        state.history.push({ role: "user", content: userText });
+
+        const assistantBubble = renderMessage("assistant", "");
+        state.generating = true;
+        syncUiState();
+        setStatus(
+          "Generating... (thinking " + (enableThinking ? "on" : "off") + ")"
+        );
+
+        try {
+          const toolResult = tryToolCallFromUserText(userText);
+          if (toolResult) {
+            const toolText =
+              "[tool:get_current_time]\n" +
+              toolResult.formatted +
+              "\nTZ: " +
+              toolResult.timeZone +
+              "\nISO: " +
+              toolResult.iso;
+            assistantBubble.textContent = toolText;
+            state.history.push({ role: "assistant", content: toolText });
+            setStatus("Tool executed: get_current_time");
+            return;
+          }
+
+          const messages = [];
+          const systemText = dom.systemPrompt.value.trim();
+          if (systemText) {
+            messages.push({ role: "system", content: systemText });
+          }
+          messages.push(...state.history);
+
+          const prompt = await formatPromptForChat(messages, enableThinking);
+
+          const chunks = await state.model.createCompletion(prompt, {
+            nPredict: 512,
+            sampling: {
+              temp: 0.7,
+              top_p: 0.9,
+              top_k: 40,
+            },
+            stream: true,
+            useCache: true,
+          });
+
+          let finalText = "";
+          for await (const chunk of chunks) {
+            finalText = chunk.currentText ?? finalText;
+            assistantBubble.textContent = finalText;
+            scrollChatToBottom();
+          }
+
+          if (!finalText) {
+            finalText = "(empty response)";
+            assistantBubble.textContent = finalText;
+          }
+
+          state.history.push({ role: "assistant", content: finalText });
+          setStatus("Ready.");
+        } catch (error) {
+          console.error(error);
+          const msg = "Generation failed: " + (error?.message || String(error));
+          assistantBubble.textContent = msg;
+          setStatus(msg);
+        } finally {
+          state.generating = false;
+          syncUiState();
+          dom.userInput.focus();
+        }
+      }
+
+      function resetChat() {
+        state.history = [];
+        dom.chatLog.innerHTML = "";
+        setStatus(state.loaded ? "Chat reset. Ready." : "Idle");
+      }
+
+      dom.loadBtn.addEventListener("click", loadModel);
+      dom.sendBtn.addEventListener("click", sendMessage);
+      dom.resetBtn.addEventListener("click", resetChat);
+      dom.modelPreset.addEventListener("change", () => {
+        if (!dom.modelPreset.value) {
+          return;
+        }
+        dom.modelUrl.value = dom.modelPreset.value;
+        setStatus("Preset selected. Click Load Model.");
+      });
+      dom.modelUrl.addEventListener("input", syncPresetFromModelUrl);
+      dom.modelUrl.addEventListener("change", syncPresetFromModelUrl);
+      dom.userInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          sendMessage();
+        }
+      });
+
+      dom.envText.textContent =
+        "crossOriginIsolated=" +
+        String(window.crossOriginIsolated) +
+        " | threads=" +
+        String(navigator.hardwareConcurrency || "n/a");
+      syncPresetFromModelUrl();
+      syncUiState();
+      setStatus("Idle");
+    </script>
+  </body>
+</html>
+
