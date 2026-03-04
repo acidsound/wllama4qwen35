@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -272,6 +272,143 @@
         color: #4a5c53;
       }
 
+      .tabs {
+        display: flex;
+        gap: 8px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        background: #eff5e9;
+      }
+
+      .tab-btn {
+        border-radius: 999px;
+        border: 1px solid #9fb7a8;
+        background: #f6fbf2;
+        color: #2b4b39;
+      }
+
+      .tab-btn.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #effff6;
+      }
+
+      .panel {
+        display: none;
+      }
+
+      .panel.active {
+        display: block;
+      }
+
+      .vision-shell {
+        padding: 14px;
+        background: #f8fbf2;
+      }
+
+      .vision-model-grid {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .vision-video-container {
+        position: relative;
+        width: min(100%, 760px);
+        margin: 0 auto;
+        aspect-ratio: 4 / 3;
+        border-radius: 14px;
+        border: 1px solid #afc2b4;
+        overflow: hidden;
+        background: #07120a;
+      }
+
+      .vision-video-feed {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .vision-pill {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        border-radius: 999px;
+        background: rgba(18, 26, 19, 0.74);
+        border: 1px solid rgba(223, 237, 229, 0.35);
+        color: #edf7f0;
+        font-size: 0.77rem;
+        padding: 6px 10px;
+      }
+
+      .vision-toggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        border-radius: 999px;
+        background: rgba(18, 26, 19, 0.74);
+        border: 1px solid rgba(223, 237, 229, 0.35);
+        color: #edf7f0;
+        font-size: 0.77rem;
+        padding: 6px 10px;
+      }
+
+      .vision-overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: rgba(2, 7, 3, 0.62);
+        color: #eef9f1;
+        font-weight: 600;
+      }
+
+      .vision-overlay.active {
+        display: flex;
+      }
+
+      .vision-spinner {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid rgba(237, 249, 241, 0.35);
+        border-top-color: #eef9f1;
+        animation: vision-spin 0.85s linear infinite;
+      }
+
+      .vision-fields {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .vision-textarea {
+        min-height: 118px;
+        height: 118px;
+        resize: none;
+        overflow-y: auto;
+      }
+
+      .vision-response {
+        min-height: 118px;
+        height: 118px;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @keyframes vision-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
       @media (max-width: 920px) {
         .grid {
           grid-template-columns: 1fr;
@@ -280,6 +417,14 @@
         .config {
           border-right: 0;
           border-bottom: 1px solid var(--line);
+        }
+
+        .vision-fields {
+          grid-template-columns: 1fr;
+        }
+
+        .vision-model-grid {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -290,81 +435,191 @@
         <h1>Qwen3.5 Chat Playground</h1>
         <div class="sub">Load model in browser and verify chat in one page.</div>
       </header>
-      <section class="grid">
-        <aside class="config">
-          <label for="modelUrl">Model URL</label>
-          <input
-            id="modelUrl"
-            type="text"
-            value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q3_K_S.gguf"
-          />
+      <div class="tabs" role="tablist" aria-label="Runtime tabs">
+        <button
+          id="tabWllama"
+          class="tab-btn active"
+          role="tab"
+          aria-selected="true"
+          aria-controls="wllamaPanel"
+        >
+          wllama Chat
+        </button>
+        <button
+          id="tabTransformer"
+          class="tab-btn"
+          role="tab"
+          aria-selected="false"
+          aria-controls="transformerPanel"
+        >
+          Transformer+Multi Modal
+        </button>
+      </div>
 
-          <label for="modelPreset">Quick Preset</label>
-          <select id="modelPreset">
-            <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q3_K_S.gguf">
-              Fast / low RAM (Q3_K_S, ~441MB)
-            </option>
-            <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf">
-              Balanced (Q4_K_M, ~533MB)
-            </option>
-            <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q5_K_M.gguf">
-              Higher quality (Q5_K_M, ~590MB)
-            </option>
-            <option value="">Custom URL (manual)</option>
-          </select>
+      <section id="wllamaPanel" class="panel active" role="tabpanel">
+        <section class="grid">
+          <aside class="config">
+            <label for="modelUrl">Model URL</label>
+            <input
+              id="modelUrl"
+              type="text"
+              value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q3_K_S.gguf"
+            />
 
-          <label for="systemPrompt">System Prompt</label>
-          <textarea id="systemPrompt" rows="3">You are a helpful assistant.</textarea>
+            <label for="modelPreset">Quick Preset</label>
+            <select id="modelPreset">
+              <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q3_K_S.gguf">
+                Fast / low RAM (Q3_K_S, ~441MB)
+              </option>
+              <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf">
+                Balanced (Q4_K_M, ~533MB)
+              </option>
+              <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q5_K_M.gguf">
+                Higher quality (Q5_K_M, ~590MB)
+              </option>
+              <option value="">Custom URL (manual)</option>
+            </select>
 
-          <label for="nCtx">Context Size (n_ctx)</label>
-          <input id="nCtx" type="number" min="256" step="256" value="512" />
+            <label for="systemPrompt">System Prompt</label>
+            <textarea id="systemPrompt" rows="3">You are a helpful assistant.</textarea>
 
-          <label for="nBatch">Batch Size (n_batch)</label>
-          <input id="nBatch" type="number" min="16" step="16" value="64" />
+            <label for="nCtx">Context Size (n_ctx)</label>
+            <input id="nCtx" type="number" min="256" step="256" value="512" />
 
-          <label class="toggle" for="enableThinking">
-            <input id="enableThinking" type="checkbox" />
-            Enable thinking mode
-          </label>
+            <label for="nBatch">Batch Size (n_batch)</label>
+            <input id="nBatch" type="number" min="16" step="16" value="64" />
 
-          <div class="row">
-            <button id="loadBtn" class="primary">Load Model</button>
-            <button id="resetBtn" class="ghost">Reset Chat</button>
-          </div>
+            <label class="toggle" for="enableThinking">
+              <input id="enableThinking" type="checkbox" />
+              Enable thinking mode
+            </label>
 
-          <div class="status">
-            <div id="statusText"><code>Idle</code></div>
-            <progress id="loadProgress" max="100" value="0"></progress>
-            <div class="meta" id="envText"></div>
-            <textarea
-              id="nativeLog"
-              rows="8"
-              readonly
-              style="margin-top:8px; background:#f9fff8;"
-            ></textarea>
-          </div>
-
-          <div class="hint">
-            Tool demo: ask <code>what time is it?</code> or <code>time now in Asia/Seoul</code><br />
-            The page runs local JS tool <code>get_current_time</code> for verification.<br />
-            You can toggle <code>thinking mode</code> before sending messages.
-          </div>
-        </aside>
-
-        <section class="chat">
-          <div id="chatLog" class="chat-log"></div>
-          <div class="composer">
-            <label for="userInput">Message</label>
-            <textarea
-              id="userInput"
-              rows="3"
-              placeholder="Type and press Ctrl+Enter, or click Send..."
-            ></textarea>
             <div class="row">
-              <button id="sendBtn" class="primary" disabled>Send</button>
+              <button id="loadBtn" class="primary">Load Model</button>
+              <button id="resetBtn" class="ghost">Reset Chat</button>
+            </div>
+
+            <div class="status">
+              <div id="statusText"><code>Idle</code></div>
+              <progress id="loadProgress" max="100" value="0"></progress>
+              <div class="meta" id="envText"></div>
+              <textarea
+                id="nativeLog"
+                rows="8"
+                readonly
+                style="margin-top:8px; background:#f9fff8;"
+              ></textarea>
+            </div>
+
+            <div class="hint">
+              Tool demo: ask <code>what time is it?</code> or <code>time now in Asia/Seoul</code><br />
+              The page runs local JS tool <code>get_current_time</code> for verification.<br />
+              You can toggle <code>thinking mode</code> before sending messages.
+            </div>
+          </aside>
+
+          <section class="chat">
+            <div id="chatLog" class="chat-log"></div>
+            <div class="composer">
+              <label for="userInput">Message</label>
+              <textarea
+                id="userInput"
+                rows="3"
+                placeholder="Type and press Ctrl+Enter, or click Send..."
+              ></textarea>
+              <div class="row">
+                <button id="sendBtn" class="primary" disabled>Send</button>
+              </div>
+            </div>
+          </section>
+        </section>
+      </section>
+
+      <section id="transformerPanel" class="panel" role="tabpanel" hidden>
+        <div class="vision-shell">
+          <div class="vision-model-grid">
+            <div>
+              <label for="visionModelUrl">Model URL</label>
+              <input
+                id="visionModelUrl"
+                type="text"
+                value="https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX"
+              />
+            </div>
+            <div>
+              <label for="visionModelPreset">Quick Preset</label>
+              <select id="visionModelPreset">
+                <option value="https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX">
+                  Qwen3.5-0.8B-ONNX
+                </option>
+                <option value="">Custom URL (manual)</option>
+              </select>
             </div>
           </div>
-        </section>
+
+          <div id="visionVideoContainer" class="vision-video-container">
+            <video
+              id="visionVideoFeed"
+              class="vision-video-feed"
+              autoplay
+              playsinline
+              muted
+            ></video>
+            <div id="visionSourcePill" class="vision-pill">Webcam</div>
+            <button id="visionSourceToggleButton" class="vision-toggle" type="button">
+              Use video file
+            </button>
+            <input id="visionVideoFileInput" type="file" accept="video/*" class="hidden" />
+            <div id="visionLoadingOverlay" class="vision-overlay active">
+              <span class="vision-spinner"></span>
+              <span>Preparing model...</span>
+            </div>
+            <div id="visionPrefillIndicator" class="vision-overlay">
+              <span class="vision-spinner"></span>
+              <span>Processing frame...</span>
+            </div>
+          </div>
+
+          <canvas id="visionCanvas" class="hidden"></canvas>
+
+          <div class="vision-fields">
+            <div>
+              <label for="visionInstructionText">Instruction</label>
+              <textarea
+                id="visionInstructionText"
+                class="vision-textarea"
+                rows="3"
+                placeholder="Describe what you want from the current frame..."
+              ></textarea>
+            </div>
+            <div>
+              <label for="visionResponseText">Response</label>
+              <textarea
+                id="visionResponseText"
+                class="vision-response vision-textarea"
+                rows="4"
+                readonly
+                placeholder="Response will appear here..."
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="row">
+            <button id="visionLoadModelBtn" class="ghost" type="button">
+              Load Vision Model
+            </button>
+            <button id="visionStartButton" class="primary" disabled>Start</button>
+            <button id="visionRefreshCameraButton" class="ghost" type="button">
+              Refresh Webcam
+            </button>
+          </div>
+
+          <div id="visionStatusText" class="hint">
+            Switch to this tab to initialize transformer + multimodal ONNX runtime.
+          </div>
+          <div id="visionInferenceState" class="meta">Inference idle.</div>
+          <div id="visionFrameStats" class="meta">Last frame: -</div>
+        </div>
       </section>
     </main>
 
@@ -389,6 +644,33 @@
         sendBtn: document.getElementById("sendBtn"),
       };
 
+      const tabs = {
+        tabWllama: document.getElementById("tabWllama"),
+        tabTransformer: document.getElementById("tabTransformer"),
+        wllamaPanel: document.getElementById("wllamaPanel"),
+        transformerPanel: document.getElementById("transformerPanel"),
+      };
+
+      const visionDom = {
+        modelUrl: document.getElementById("visionModelUrl"),
+        modelPreset: document.getElementById("visionModelPreset"),
+        loadModelBtn: document.getElementById("visionLoadModelBtn"),
+        videoFeed: document.getElementById("visionVideoFeed"),
+        videoCanvas: document.getElementById("visionCanvas"),
+        instruction: document.getElementById("visionInstructionText"),
+        response: document.getElementById("visionResponseText"),
+        startBtn: document.getElementById("visionStartButton"),
+        refreshCameraBtn: document.getElementById("visionRefreshCameraButton"),
+        sourceToggleBtn: document.getElementById("visionSourceToggleButton"),
+        sourcePill: document.getElementById("visionSourcePill"),
+        videoFileInput: document.getElementById("visionVideoFileInput"),
+        loadingOverlay: document.getElementById("visionLoadingOverlay"),
+        prefillOverlay: document.getElementById("visionPrefillIndicator"),
+        statusText: document.getElementById("visionStatusText"),
+        inferenceState: document.getElementById("visionInferenceState"),
+        frameStats: document.getElementById("visionFrameStats"),
+      };
+
       const state = {
         model: null,
         loaded: false,
@@ -411,6 +693,766 @@
         "single-thread/wllama.wasm": "./single-thread/wllama.wasm",
         "multi-thread/wllama.wasm": "./multi-thread/wllama.wasm",
       };
+
+      const visionState = {
+        sourceMode: "webcam",
+        webcamStream: null,
+        fileObjectUrl: null,
+        module: null,
+        processor: null,
+        model: null,
+        initializing: false,
+        ready: false,
+        loadedModelId: null,
+        loadedModelUrl: null,
+        processing: false,
+        loopId: 0,
+        frameSeq: 0,
+        activeFrameSeq: 0,
+        activeFrameStartedAt: 0,
+        inferenceActive: false,
+        stopRequested: false,
+        firstTokenReceivedForActiveFrame: false,
+        inferenceTicker: null,
+        lastFrameSeq: 0,
+        lastFrameDurationMs: 0,
+      };
+
+      const visionConfig = {
+        defaultModelUrl: "https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX",
+        moduleUrl:
+          "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.0-next.5",
+        ortWasmBaseUrl: new URL(
+          "./vendor/onnxruntime-web/",
+          window.location.href
+        ).href,
+        captureMaxWidth: 800,
+      };
+
+      function setActiveTab(tabName) {
+        const isWllama = tabName === "wllama";
+
+        tabs.tabWllama.classList.toggle("active", isWllama);
+        tabs.tabTransformer.classList.toggle("active", !isWllama);
+        tabs.tabWllama.setAttribute("aria-selected", String(isWllama));
+        tabs.tabTransformer.setAttribute("aria-selected", String(!isWllama));
+
+        tabs.wllamaPanel.classList.toggle("active", isWllama);
+        tabs.transformerPanel.classList.toggle("active", !isWllama);
+        tabs.wllamaPanel.hidden = !isWllama;
+        tabs.transformerPanel.hidden = isWllama;
+
+        if (!isWllama) {
+          void ensureVisionInitialized();
+        } else if (visionState.processing) {
+          stopVisionProcessing();
+        }
+      }
+
+      function setVisionStatus(message) {
+        visionDom.statusText.textContent = message;
+      }
+
+      function tryParseVisionModelUrl(rawValue, silent = false) {
+        const candidate = (rawValue || "").trim() || visionConfig.defaultModelUrl;
+        let url;
+        try {
+          url = new URL(candidate);
+        } catch {
+          if (!silent) {
+            setVisionStatus("Model URL must be a valid URL.");
+          }
+          return null;
+        }
+
+        const host = url.hostname.toLowerCase();
+        if (host !== "huggingface.co" && !host.endsWith(".huggingface.co")) {
+          if (!silent) {
+            setVisionStatus("Model URL must be a Hugging Face model URL.");
+          }
+          return null;
+        }
+
+        const segments = url.pathname.split("/").filter(Boolean);
+        if (segments.length < 2) {
+          if (!silent) {
+            setVisionStatus(
+              "Model URL format: https://huggingface.co/{org}/{model}"
+            );
+          }
+          return null;
+        }
+
+        if (segments[0] === "spaces" || segments[0] === "datasets") {
+          if (!silent) {
+            setVisionStatus(
+              "Model URL must point to a model repo (not space/dataset)."
+            );
+          }
+          return null;
+        }
+
+        let org = segments[0];
+        let model = segments[1];
+        if (segments[0] === "models" && segments.length >= 3) {
+          org = segments[1];
+          model = segments[2];
+        }
+
+        if (!org || !model) {
+          if (!silent) {
+            setVisionStatus(
+              "Model URL format: https://huggingface.co/{org}/{model}"
+            );
+          }
+          return null;
+        }
+
+        return {
+          modelId: org + "/" + model,
+          modelUrl: "https://huggingface.co/" + org + "/" + model,
+        };
+      }
+
+      function getSelectedVisionModelInfo() {
+        return tryParseVisionModelUrl(visionDom.modelUrl.value, false);
+      }
+
+      function syncVisionPresetFromModelUrl() {
+        const parsed = tryParseVisionModelUrl(visionDom.modelUrl.value, true);
+        const current = parsed ? parsed.modelUrl : visionDom.modelUrl.value.trim();
+        const matched = Array.from(visionDom.modelPreset.options).some(
+          (opt) => opt.value && opt.value === current
+        );
+        visionDom.modelPreset.value = matched ? current : "";
+      }
+
+      function isVisionModelSelectionDirty() {
+        if (!visionState.loadedModelUrl) {
+          return false;
+        }
+        const parsed = tryParseVisionModelUrl(visionDom.modelUrl.value, true);
+        if (!parsed) {
+          return true;
+        }
+        return parsed.modelUrl !== visionState.loadedModelUrl;
+      }
+
+      function configureVisionRuntimeEnv(moduleRef) {
+        const envRef = moduleRef?.env;
+        if (!envRef || typeof envRef !== "object") {
+          return;
+        }
+
+        const onnxWasm = envRef.backends?.onnx?.wasm;
+        if (onnxWasm && typeof onnxWasm === "object") {
+          onnxWasm.proxy = false;
+          onnxWasm.numThreads = 1;
+          onnxWasm.wasmPaths = visionConfig.ortWasmBaseUrl;
+        }
+
+        const ortWasm = envRef.wasm;
+        if (ortWasm && typeof ortWasm === "object") {
+          ortWasm.proxy = false;
+          ortWasm.numThreads = 1;
+          ortWasm.wasmPaths = visionConfig.ortWasmBaseUrl;
+        }
+      }
+
+      function setVisionResponse(text) {
+        visionDom.response.value = text;
+      }
+
+      function setVisionLoading(isLoading, label = "Preparing model...") {
+        visionDom.loadingOverlay.classList.toggle("active", isLoading);
+        const text = visionDom.loadingOverlay.querySelector("span:last-child");
+        if (text) {
+          text.textContent = label;
+        }
+      }
+
+      function setVisionPrefill(isProcessing, label = "Processing frame...") {
+        visionDom.prefillOverlay.classList.toggle("active", isProcessing);
+        const text = visionDom.prefillOverlay.querySelector("span:last-child");
+        if (text) {
+          text.textContent = label;
+        }
+      }
+
+      function formatVisionMs(ms) {
+        if (!Number.isFinite(ms) || ms < 0) {
+          return "-";
+        }
+        if (ms < 1000) {
+          return Math.round(ms) + "ms";
+        }
+        return (ms / 1000).toFixed(2) + "s";
+      }
+
+      function clearVisionInferenceTicker() {
+        if (visionState.inferenceTicker) {
+          clearInterval(visionState.inferenceTicker);
+          visionState.inferenceTicker = null;
+        }
+      }
+
+      function updateVisionInferenceUi() {
+        if (visionState.inferenceActive) {
+          const elapsed = performance.now() - visionState.activeFrameStartedAt;
+          if (visionState.stopRequested || !visionState.processing) {
+            visionDom.inferenceState.textContent =
+              "Stop requested. Inferencing frame #" +
+              String(visionState.activeFrameSeq) +
+              " (" +
+              formatVisionMs(elapsed) +
+              ")";
+          } else {
+            visionDom.inferenceState.textContent =
+              "Inferencing frame #" +
+              String(visionState.activeFrameSeq) +
+              " (" +
+              formatVisionMs(elapsed) +
+              ")";
+          }
+        } else if (visionState.processing) {
+          visionDom.inferenceState.textContent =
+            "Loop active. Waiting for next frame...";
+        } else {
+          visionDom.inferenceState.textContent = "Inference idle.";
+        }
+
+        if (visionState.lastFrameSeq > 0) {
+          visionDom.frameStats.textContent =
+            "Last frame #" +
+            String(visionState.lastFrameSeq) +
+            ": " +
+            formatVisionMs(visionState.lastFrameDurationMs);
+        } else {
+          visionDom.frameStats.textContent = "Last frame: -";
+        }
+      }
+
+      function beginVisionFrameInference() {
+        visionState.frameSeq += 1;
+        visionState.activeFrameSeq = visionState.frameSeq;
+        visionState.activeFrameStartedAt = performance.now();
+        visionState.inferenceActive = true;
+        visionState.stopRequested = false;
+        visionState.firstTokenReceivedForActiveFrame = false;
+        setVisionPrefill(
+          true,
+          "Analyzing frame #" + String(visionState.activeFrameSeq) + "..."
+        );
+        clearVisionInferenceTicker();
+        visionState.inferenceTicker = setInterval(updateVisionInferenceUi, 120);
+        updateVisionInferenceUi();
+        return visionState.activeFrameSeq;
+      }
+
+      function endVisionFrameInference(frameSeq) {
+        const duration = performance.now() - visionState.activeFrameStartedAt;
+        visionState.inferenceActive = false;
+        visionState.firstTokenReceivedForActiveFrame = false;
+        visionState.stopRequested = false;
+        visionState.lastFrameSeq = frameSeq;
+        visionState.lastFrameDurationMs = duration;
+        clearVisionInferenceTicker();
+        setVisionPrefill(false);
+        updateVisionInferenceUi();
+      }
+
+      function describeVisionError(error) {
+        if (error instanceof Error) {
+          const extra = error.cause ? " | cause: " + String(error.cause) : "";
+          return (error.message || error.name || "Unknown Error") + extra;
+        }
+        if (typeof error === "number") {
+          return (
+            "Runtime error code " +
+            String(error) +
+            " (likely backend/model loading failure)"
+          );
+        }
+        if (typeof error === "string") {
+          return error;
+        }
+        try {
+          return JSON.stringify(error);
+        } catch {
+          return String(error);
+        }
+      }
+
+      async function loadVisionModelWithFallback(
+        Qwen3_5ForConditionalGeneration,
+        selectedModelId
+      ) {
+        const attempts = [
+          {
+            label: "webgpu/q4",
+            options: {
+              dtype: {
+                embed_tokens: "q4",
+                vision_encoder: "fp16",
+                decoder_model_merged: "q4",
+              },
+              device: "webgpu",
+            },
+          },
+          {
+            label: "webgpu/default",
+            options: {
+              device: "webgpu",
+            },
+          },
+          {
+            label: "wasm/q4",
+            options: {
+              dtype: {
+                embed_tokens: "q4",
+                vision_encoder: "fp16",
+                decoder_model_merged: "q4",
+              },
+              device: "wasm",
+            },
+          },
+        ];
+
+        const failures = [];
+        for (const attempt of attempts) {
+          try {
+            setVisionLoading(
+              true,
+              "Loading ONNX model (" + attempt.label + ")..."
+            );
+            const model = await Qwen3_5ForConditionalGeneration.from_pretrained(
+              selectedModelId,
+              attempt.options
+            );
+            return { model, runtimeLabel: attempt.label };
+          } catch (error) {
+            const detail = describeVisionError(error);
+            failures.push(attempt.label + ": " + detail);
+            console.warn(
+              "Vision model load attempt failed",
+              attempt.label,
+              error
+            );
+          }
+        }
+
+        throw new Error("All load attempts failed | " + failures.join(" || "));
+      }
+
+      function setVisionStartMode(mode) {
+        if (mode === "stop") {
+          visionDom.startBtn.textContent = "Stop";
+          visionDom.startBtn.classList.remove("primary");
+          visionDom.startBtn.classList.add("ghost");
+        } else {
+          visionDom.startBtn.textContent = "Start";
+          visionDom.startBtn.classList.remove("ghost");
+          visionDom.startBtn.classList.add("primary");
+        }
+      }
+
+      function hasVisionFrame() {
+        return (
+          visionDom.videoFeed.videoWidth > 0 && visionDom.videoFeed.videoHeight > 0
+        );
+      }
+
+      function hasVisionInput() {
+        if (visionState.sourceMode === "file") {
+          return Boolean(visionDom.videoFeed.src);
+        }
+        return Boolean(visionState.webcamStream);
+      }
+
+      function updateVisionSourceUi() {
+        const isWebcam = visionState.sourceMode === "webcam";
+        visionDom.sourcePill.textContent = isWebcam ? "Webcam" : "Video file";
+        visionDom.sourceToggleBtn.textContent = isWebcam
+          ? "Use video file"
+          : "Use webcam";
+      }
+
+      function updateVisionControls() {
+        const isBusy = visionState.processing || visionState.initializing;
+        visionDom.modelUrl.disabled = isBusy;
+        visionDom.modelPreset.disabled = isBusy;
+        visionDom.loadModelBtn.disabled = isBusy;
+        visionDom.sourceToggleBtn.disabled =
+          visionState.processing || visionState.initializing;
+        visionDom.refreshCameraBtn.disabled =
+          visionState.processing || visionState.initializing;
+
+        if (visionState.processing) {
+          visionDom.startBtn.disabled = false;
+          return;
+        }
+
+        visionDom.startBtn.disabled =
+          !visionState.ready ||
+          visionState.initializing ||
+          !hasVisionInput() ||
+          isVisionModelSelectionDirty();
+      }
+
+      function stopVisionWebcamStream() {
+        if (visionState.webcamStream) {
+          visionState.webcamStream.getTracks().forEach((track) => track.stop());
+          visionState.webcamStream = null;
+        }
+      }
+
+      function releaseVisionFileUrl() {
+        if (visionState.fileObjectUrl) {
+          URL.revokeObjectURL(visionState.fileObjectUrl);
+          visionState.fileObjectUrl = null;
+        }
+      }
+
+      async function initVisionCamera() {
+        stopVisionWebcamStream();
+        releaseVisionFileUrl();
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+          visionState.webcamStream = stream;
+          visionState.sourceMode = "webcam";
+          visionDom.videoFeed.removeAttribute("src");
+          visionDom.videoFeed.srcObject = stream;
+          await visionDom.videoFeed.play();
+          updateVisionSourceUi();
+          updateVisionControls();
+          return true;
+        } catch (error) {
+          setVisionStatus(
+            "Camera access failed: " + (error?.message || String(error))
+          );
+          return false;
+        }
+      }
+
+      async function switchVisionToWebcam() {
+        const ok = await initVisionCamera();
+        if (ok) {
+          setVisionStatus("Webcam ready.");
+        }
+      }
+
+      async function switchVisionToVideoFile(file) {
+        if (!file) {
+          return;
+        }
+        stopVisionWebcamStream();
+        releaseVisionFileUrl();
+
+        visionState.fileObjectUrl = URL.createObjectURL(file);
+        visionState.sourceMode = "file";
+        visionDom.videoFeed.srcObject = null;
+        visionDom.videoFeed.src = visionState.fileObjectUrl;
+        visionDom.videoFeed.loop = true;
+        visionDom.videoFeed.muted = true;
+
+        try {
+          await visionDom.videoFeed.play();
+        } catch (error) {
+          console.warn("video autoplay blocked:", error);
+        }
+
+        updateVisionSourceUi();
+        updateVisionControls();
+        setVisionStatus("Using video file: " + file.name);
+      }
+
+      function captureVisionImage() {
+        if (!hasVisionFrame()) {
+          return null;
+        }
+        const { RawImage } = visionState.module;
+        const sourceWidth = visionDom.videoFeed.videoWidth;
+        const sourceHeight = visionDom.videoFeed.videoHeight;
+        const scale = Math.min(1, visionConfig.captureMaxWidth / sourceWidth);
+        visionDom.videoCanvas.width = Math.max(1, Math.round(sourceWidth * scale));
+        visionDom.videoCanvas.height = Math.max(1, Math.round(sourceHeight * scale));
+
+        const ctx = visionDom.videoCanvas.getContext("2d", {
+          willReadFrequently: true,
+        });
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          visionDom.videoFeed,
+          0,
+          0,
+          visionDom.videoCanvas.width,
+          visionDom.videoCanvas.height
+        );
+
+        return RawImage.fromCanvas(visionDom.videoCanvas);
+      }
+
+      async function runVisionInference(image) {
+        const instruction =
+          visionDom.instruction.value.trim() ||
+          "Briefly describe what you see (2 sentences max).";
+        const { TextStreamer } = visionState.module;
+
+        const messages = [
+          {
+            role: "user",
+            content: [{ type: "image" }, { type: "text", text: instruction }],
+          },
+        ];
+        const prompt = visionState.processor.apply_chat_template(messages, {
+          add_generation_prompt: true,
+          tokenizer_kwargs: { enable_thinking: false },
+        });
+        const inputs = await visionState.processor(prompt, [image]);
+
+        let waitingFirst = true;
+        await visionState.model.generate({
+          ...inputs,
+          do_sample: false,
+          max_new_tokens: 128,
+          streamer: new TextStreamer(visionState.processor.tokenizer, {
+            skip_prompt: true,
+            skip_special_tokens: true,
+            callback_function: (token) => {
+              if (waitingFirst) {
+                waitingFirst = false;
+                visionState.firstTokenReceivedForActiveFrame = true;
+                visionDom.response.value = token.trimStart();
+              } else {
+                visionDom.response.value += token;
+              }
+            },
+          }),
+        });
+      }
+
+      async function runVisionStep() {
+        const image = captureVisionImage();
+        if (!image) {
+          setVisionStatus("Video frame is not ready yet.");
+          return;
+        }
+        const frameSeq = beginVisionFrameInference();
+        try {
+          await runVisionInference(image);
+          if (visionState.processing) {
+            setVisionStatus("Ready. Frame #" + String(frameSeq) + " updated.");
+          } else {
+            setVisionStatus(
+              "Stopped. Finalizing frame #" + String(frameSeq) + " completed."
+            );
+          }
+        } catch (error) {
+          console.error(error);
+          if (visionState.stopRequested || !visionState.processing) {
+            setVisionStatus(
+              "Stopped while final frame was inferencing: " +
+                (error?.message || String(error))
+            );
+          } else {
+            setVisionStatus(
+              "Inference failed: " + (error?.message || String(error))
+            );
+          }
+          setVisionResponse("Inference failed.");
+        } finally {
+          endVisionFrameInference(frameSeq);
+        }
+      }
+
+      async function runVisionLoop(loopId) {
+        while (visionState.processing && loopId === visionState.loopId) {
+          await runVisionStep();
+          await new Promise((resolve) => setTimeout(resolve, 120));
+        }
+      }
+
+      function startVisionProcessing() {
+        if (!visionState.ready || visionState.initializing) {
+          setVisionStatus("Transformer runtime is not ready. Load the model first.");
+          return;
+        }
+        if (isVisionModelSelectionDirty()) {
+          setVisionStatus("Model changed. Click Load Vision Model.");
+          return;
+        }
+        if (!hasVisionInput()) {
+          setVisionStatus("No input source. Use webcam or upload video file.");
+          return;
+        }
+        if (!hasVisionFrame()) {
+          setVisionStatus("Video is not ready yet.");
+          return;
+        }
+        if (visionState.processing) {
+          return;
+        }
+
+        visionState.processing = true;
+        visionState.stopRequested = false;
+        visionState.loopId += 1;
+        setVisionStartMode("stop");
+        updateVisionControls();
+        setVisionStatus("Processing...");
+        updateVisionInferenceUi();
+        void runVisionLoop(visionState.loopId);
+      }
+
+      function stopVisionProcessing() {
+        if (!visionState.processing) {
+          return;
+        }
+        visionState.processing = false;
+        visionState.loopId += 1;
+        visionState.stopRequested = true;
+        if (visionState.inferenceActive) {
+          setVisionStatus(
+            "Stop requested. Current frame inference is still running..."
+          );
+          if (!visionState.firstTokenReceivedForActiveFrame) {
+            setVisionResponse(
+              "Inference in progress... (will stop after the current frame)"
+            );
+          }
+          setVisionPrefill(
+            true,
+            "Stop requested. Finishing frame #" +
+              String(visionState.activeFrameSeq) +
+              "..."
+          );
+        } else {
+          visionState.stopRequested = false;
+          clearVisionInferenceTicker();
+          setVisionPrefill(false);
+          setVisionStatus("Stopped.");
+        }
+        setVisionStartMode("start");
+        updateVisionControls();
+        updateVisionInferenceUi();
+      }
+
+      async function ensureVisionInitialized(forceReload = false) {
+        let stage = "start";
+        if (visionState.initializing) {
+          return;
+        }
+        const selected = getSelectedVisionModelInfo();
+        if (!selected) {
+          return;
+        }
+        const selectedModelId = selected.modelId;
+        const selectedModelUrl = selected.modelUrl;
+        visionDom.modelUrl.value = selectedModelUrl;
+        syncVisionPresetFromModelUrl();
+        if (
+          !forceReload &&
+          visionState.ready &&
+          visionState.loadedModelUrl === selectedModelUrl
+        ) {
+          updateVisionControls();
+          return;
+        }
+        if (!navigator.gpu) {
+          setVisionLoading(false);
+          setVisionStatus("WebGPU is unavailable in this browser.");
+          return;
+        }
+
+        visionState.initializing = true;
+        updateVisionControls();
+        setVisionLoading(true, "Loading transformer runtime...");
+
+        try {
+          stopVisionProcessing();
+          if (!visionState.module) {
+            stage = "import transformers runtime";
+            visionState.module = await import(visionConfig.moduleUrl);
+          }
+          stage = "configure runtime env";
+          configureVisionRuntimeEnv(visionState.module);
+          const { AutoProcessor, Qwen3_5ForConditionalGeneration } =
+            visionState.module;
+
+          if (
+            visionState.model &&
+            typeof visionState.model.dispose === "function"
+          ) {
+            await visionState.model.dispose();
+          }
+          visionState.processor = null;
+          visionState.model = null;
+          visionState.ready = false;
+          visionState.loadedModelId = null;
+          visionState.loadedModelUrl = null;
+          visionState.inferenceActive = false;
+          visionState.stopRequested = false;
+          visionState.firstTokenReceivedForActiveFrame = false;
+          clearVisionInferenceTicker();
+          setVisionPrefill(false);
+          visionState.frameSeq = 0;
+          visionState.lastFrameSeq = 0;
+          visionState.lastFrameDurationMs = 0;
+          setVisionResponse("");
+          updateVisionInferenceUi();
+
+          stage = "load processor (" + selectedModelId + ")";
+          setVisionLoading(true, "Loading processor...");
+          visionState.processor = await AutoProcessor.from_pretrained(
+            selectedModelId
+          );
+
+          stage = "load ONNX model (" + selectedModelId + ")";
+          const modelResult = await loadVisionModelWithFallback(
+            Qwen3_5ForConditionalGeneration,
+            selectedModelId
+          );
+          visionState.model = modelResult.model;
+
+          visionState.ready = true;
+          visionState.loadedModelId = selectedModelId;
+          visionState.loadedModelUrl = selectedModelUrl;
+          setVisionStatus(
+            "Model ready (" +
+              selectedModelId +
+              ", " +
+              modelResult.runtimeLabel +
+              "). Initializing camera..."
+          );
+          stage = "initialize camera";
+          const cameraReady = await initVisionCamera();
+          if (cameraReady) {
+            setVisionStatus("Ready. Press Start for live analysis.");
+          } else {
+            setVisionStatus(
+              "Model ready. Camera unavailable, upload a video file instead."
+            );
+          }
+        } catch (error) {
+          console.error(error);
+          visionState.ready = false;
+          visionState.loadedModelId = null;
+          visionState.loadedModelUrl = null;
+          setVisionStatus(
+            "Initialization failed at " +
+              stage +
+              ": " +
+              describeVisionError(error)
+          );
+        } finally {
+          visionState.initializing = false;
+          setVisionLoading(false);
+          updateVisionControls();
+        }
+      }
 
       function setStatus(message) {
         dom.statusText.innerHTML = "<code>" + escapeHtml(message) + "</code>";
@@ -906,6 +1948,11 @@
         setStatus(state.loaded ? "Chat reset. Ready." : "Idle");
       }
 
+      tabs.tabWllama.addEventListener("click", () => setActiveTab("wllama"));
+      tabs.tabTransformer.addEventListener("click", () =>
+        setActiveTab("transformer")
+      );
+
       dom.loadBtn.addEventListener("click", loadModel);
       dom.sendBtn.addEventListener("click", () => {
         if (state.generating) {
@@ -935,10 +1982,97 @@
         }
       });
 
+      visionDom.startBtn.addEventListener("click", () => {
+        if (visionState.processing) {
+          stopVisionProcessing();
+        } else {
+          startVisionProcessing();
+        }
+      });
+
+      visionDom.loadModelBtn.addEventListener("click", async () => {
+        await ensureVisionInitialized(true);
+      });
+
+      visionDom.modelPreset.addEventListener("change", () => {
+        if (!visionDom.modelPreset.value) {
+          return;
+        }
+        visionDom.modelUrl.value = visionDom.modelPreset.value;
+        syncVisionPresetFromModelUrl();
+        setVisionStatus("Preset selected. Click Load Vision Model.");
+        updateVisionControls();
+      });
+
+      visionDom.modelUrl.addEventListener("input", () => {
+        syncVisionPresetFromModelUrl();
+        if (visionState.ready && isVisionModelSelectionDirty()) {
+          setVisionStatus("Model changed. Click Load Vision Model.");
+          updateVisionControls();
+        }
+      });
+
+      visionDom.modelUrl.addEventListener("change", () => {
+        syncVisionPresetFromModelUrl();
+        if (visionState.ready && isVisionModelSelectionDirty()) {
+          setVisionStatus("Model changed. Click Load Vision Model.");
+          updateVisionControls();
+        }
+      });
+
+      visionDom.refreshCameraBtn.addEventListener("click", async () => {
+        if (visionState.processing || visionState.initializing) {
+          return;
+        }
+        await switchVisionToWebcam();
+      });
+
+      visionDom.sourceToggleBtn.addEventListener("click", async () => {
+        if (visionState.processing || visionState.initializing) {
+          return;
+        }
+        if (visionState.sourceMode === "webcam") {
+          visionDom.videoFileInput.click();
+          return;
+        }
+        await switchVisionToWebcam();
+      });
+
+      visionDom.videoFileInput.addEventListener("change", async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+          return;
+        }
+        await switchVisionToVideoFile(file);
+        event.target.value = "";
+      });
+
+      visionDom.videoFeed.addEventListener("loadeddata", () => {
+        updateVisionControls();
+      });
+
+      window.addEventListener("beforeunload", () => {
+        stopVisionProcessing();
+        clearVisionInferenceTicker();
+        stopVisionWebcamStream();
+        releaseVisionFileUrl();
+      });
+
       updateEnvText();
       syncPresetFromModelUrl();
       syncUiState();
       setStatus("Idle");
+      visionDom.instruction.value =
+        "Briefly describe what you see (2 sentences max).";
+      syncVisionPresetFromModelUrl();
+      setVisionStatus(
+        "Switch to Transformer+Multi Modal tab to initialize ONNX runtime."
+      );
+      setVisionStartMode("start");
+      updateVisionSourceUi();
+      updateVisionControls();
+      updateVisionInferenceUi();
+      setActiveTab("wllama");
     </script>
   </body>
 </html>
