@@ -1220,6 +1220,35 @@
         );
       }
 
+      async function ensureOnnxChatTemplate(tokenizer, modelInfo) {
+        if (tokenizer.chat_template) {
+          return;
+        }
+
+        const templateUrl =
+          modelInfo.modelUrl + "/resolve/main/chat_template.jinja";
+        setStatus("Loading ONNX chat template...");
+        const response = await fetch(templateUrl);
+        if (!response.ok) {
+          throw new Error(
+            "Tokenizer chat_template is missing and " +
+              templateUrl +
+              " could not be loaded (HTTP " +
+              response.status +
+              ")."
+          );
+        }
+
+        const chatTemplate = await response.text();
+        if (!chatTemplate.trim()) {
+          throw new Error("Loaded chat_template.jinja is empty: " + templateUrl);
+        }
+        tokenizer.chat_template = chatTemplate
+          .replace(/\{%-?\s*generation\s*-?%\}/g, "")
+          .replace(/\{%-?\s*endgeneration\s*-?%\}/g, "");
+        pushNativeLog("log", ["Loaded ONNX chat template:", templateUrl]);
+      }
+
       async function disposeActiveChatModel() {
         if (!state.model) {
           state.backend = null;
@@ -1293,6 +1322,7 @@
           modelInfo.modelId,
           { progress_callback: progressCallback }
         );
+        await ensureOnnxChatTemplate(state.onnxTokenizer, modelInfo);
 
         setStatus("Reading ONNX model configuration...");
         const modelConfig = await AutoConfig.from_pretrained(
