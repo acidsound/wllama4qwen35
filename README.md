@@ -1,6 +1,6 @@
 # wllama4qwen35
 
-This repository includes a recent `wllama` build output that works with Qwen3.5 GGUF models, plus a single-page verification app with a Transformers.js/ONNX Runtime path for compatible Qwen3.5 ONNX models.
+This repository includes a recent `wllama` build output that works with Qwen3.5 GGUF models, plus a single-page verification app with a Transformers.js/ONNX Runtime path for compatible Qwen3.5 and causal-language-model ONNX repositories.
 
 Date baseline: `2026-03-03`.
 
@@ -137,11 +137,38 @@ Examples:
 ```text
 https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX
 https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX/resolve/main/onnx/decoder_model_merged_q4.onnx
+https://huggingface.co/acidsound/LFM2.5-2.6B-Uncensored-ONNX
+https://huggingface.co/acidsound/LFM2.5-2.6B-Uncensored-ONNX/resolve/main/onnx/model_q4f16.onnx
 ```
 
-A direct `.onnx` URL is normalized to its parent model repository because chat inference also requires the repository's tokenizer, config, and companion graph files. Arbitrary standalone `.onnx` files and non-Hugging-Face URLs are not supported.
+A direct `.onnx` URL is normalized to its parent model repository because chat inference also requires the repository's tokenizer, config, and companion graph files. Do not enter the `.onnx_data` URL separately; Transformers.js downloads external data files according to `transformers.js_config.use_external_data_format` in `config.json`. Arbitrary standalone `.onnx` files and non-Hugging-Face URLs are not supported.
 
-ONNX chat loading tries WebGPU Q4, WebGPU default, and then WASM Q4. The `n_ctx` and `n_batch` controls apply only to GGUF/wllama models.
+The loader reads `model_type` and uses the Qwen3.5 conditional-generation class or generic `AutoModelForCausalLM` as appropriate. Decoder-only models try the explicitly requested dtype, WebGPU `q4f16`, WebGPU `q4`, and then WASM `q4`. The `n_ctx` and `n_batch` controls apply only to GGUF/wllama models.
+
+For one external data file named `model_q4f16.onnx_data`, its `config.json` entry must declare one chunk:
+
+```json
+{
+  "transformers.js_config": {
+    "use_external_data_format": {
+      "model_q4f16.onnx": 1
+    }
+  }
+}
+```
+
+### Thinking toggle with LFM2.5
+
+`LFM2.5-2.6B` is an always-thinking checkpoint: its original template unconditionally opens `<think>` and does not implement `enable_thinking`. When **Enable thinking mode** is unchecked, this app renders the original conversation without a generation prompt and appends a short, already-closed thinking block before generation:
+
+```text
+<|im_start|>assistant
+<think>
+No unnecessary reasoning. Close thinking and answer immediately.
+</think>
+```
+
+This is a template-level compatibility mode, not a change to the model weights. It encourages a direct answer but cannot guarantee that the model will never emit additional reasoning. When the toggle is checked, the original always-thinking template is used unchanged.
 
 ## Threading and runtime notes
 
