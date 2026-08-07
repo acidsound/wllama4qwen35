@@ -1,6 +1,6 @@
 # wllama4qwen35
 
-This repository includes a recent `wllama` build output that works with Qwen3.5 GGUF models, plus a single-page verification app.
+This repository includes a recent `wllama` build output that works with Qwen3.5 GGUF models, plus a single-page verification app with a Transformers.js/ONNX Runtime path for compatible Qwen3.5 ONNX models.
 
 Date baseline: `2026-03-03`.
 
@@ -20,6 +20,7 @@ The Vercel deployment is configured with:
 - `vendor/wllama.local.esm.js`
 - `single-thread/wllama.wasm`
 - `multi-thread/wllama.wasm`
+- `vendor/onnxruntime-web/*`
 - `serve.mjs`
 
 ## Quick local run
@@ -36,11 +37,13 @@ http://localhost:8080/
 
 ## Recommended integration (copy files)
 
-For real usage, copy these 3 artifacts into your own project and use them from the same origin:
+For GGUF/wllama usage, copy these 3 artifacts into your own project and use them from the same origin:
 
 - `vendor/wllama.local.esm.js`
 - `single-thread/wllama.wasm`
 - `multi-thread/wllama.wasm`
+
+For the ONNX backend, also copy `vendor/onnxruntime-web/*` and preserve that directory layout.
 
 Suggested layout in your app:
 
@@ -121,6 +124,24 @@ Recommended model URLs:
   `https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q5_K_M.gguf`
 
 Always use `.../resolve/main/...` URLs, not `.../blob/...`.
+
+### ONNX URLs in the wllama Chat tab
+
+The **Model URL** field in the `wllama Chat` tab automatically selects the ONNX backend when either:
+
+- the Hugging Face model repository name ends in `-ONNX`, or
+- the URL points directly to a `.onnx` file inside a Hugging Face model repository.
+
+Examples:
+
+```text
+https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX
+https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX/resolve/main/onnx/decoder_model_merged_q4.onnx
+```
+
+A direct `.onnx` URL is normalized to its parent model repository because chat inference also requires the repository's tokenizer, config, and companion graph files. Arbitrary standalone `.onnx` files and non-Hugging-Face URLs are not supported.
+
+ONNX chat loading tries WebGPU Q4, WebGPU default, and then WASM Q4. The `n_ctx` and `n_batch` controls apply only to GGUF/wllama models.
 
 ## Threading and runtime notes
 
