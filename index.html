@@ -495,6 +495,16 @@
             <label for="nBatch">Batch Size (n_batch)</label>
             <input id="nBatch" type="number" min="16" step="16" value="64" />
 
+            <label for="maxOutputTokens">Max Output Tokens</label>
+            <input
+              id="maxOutputTokens"
+              type="number"
+              min="1"
+              max="32768"
+              step="128"
+              value="512"
+            />
+
             <label class="toggle" for="enableThinking">
               <input id="enableThinking" type="checkbox" />
               Enable thinking mode
@@ -641,6 +651,7 @@
         systemPrompt: document.getElementById("systemPrompt"),
         nCtx: document.getElementById("nCtx"),
         nBatch: document.getElementById("nBatch"),
+        maxOutputTokens: document.getElementById("maxOutputTokens"),
         enableThinking: document.getElementById("enableThinking"),
         loadBtn: document.getElementById("loadBtn"),
         resetBtn: document.getElementById("resetBtn"),
@@ -1806,6 +1817,7 @@
           state.generating || onnxSelected || loadedOnnxSelected;
         dom.nBatch.disabled =
           state.generating || onnxSelected || loadedOnnxSelected;
+        dom.maxOutputTokens.disabled = state.generating;
       }
 
       function startPendingIndicator(bubble) {
@@ -2194,6 +2206,14 @@
           return;
         }
         const enableThinking = !!dom.enableThinking.checked;
+        const requestedMaxOutputTokens = Number.parseInt(
+          dom.maxOutputTokens.value,
+          10
+        );
+        const maxOutputTokens = Number.isFinite(requestedMaxOutputTokens)
+          ? Math.max(1, Math.min(32768, requestedMaxOutputTokens))
+          : 512;
+        dom.maxOutputTokens.value = String(maxOutputTokens);
 
         dom.userInput.value = "";
         renderMessage("user", userText);
@@ -2243,7 +2263,7 @@
             await state.model.generate({
               ...inputs,
               ...getOnnxGenerationOptions(enableThinking),
-              max_new_tokens: 512,
+              max_new_tokens: maxOutputTokens,
               stopping_criteria: state.onnxStoppingCriteria,
               streamer: new TextStreamer(state.onnxTokenizer, {
                 skip_prompt: true,
@@ -2262,7 +2282,7 @@
           } else {
             const prompt = await formatPromptForChat(messages, enableThinking);
             const chunks = await state.model.createCompletion(prompt, {
-              nPredict: 512,
+              nPredict: maxOutputTokens,
               sampling: {
                 temp: 0.7,
                 top_p: 0.9,
