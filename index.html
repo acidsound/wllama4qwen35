@@ -480,6 +480,9 @@
               <option value="https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX">
                 ONNX / WebGPU (Qwen3.5-0.8B)
               </option>
+              <option value="https://huggingface.co/acidsound/LFM2.5-2.6B-Uncensored-ONNX">
+                ONNX / WebGPU (LFM2.5-2.6B, q4f16)
+              </option>
               <option value="">Custom URL (manual)</option>
             </select>
 
@@ -683,6 +686,7 @@
         onnxModule: null,
         onnxTokenizer: null,
         onnxModelId: null,
+        onnxModelType: null,
         onnxRuntimeLabel: null,
         onnxStoppingCriteria: null,
         loaded: false,
@@ -772,10 +776,14 @@
 
         const org = segments[0];
         const model = segments[1];
+        const dtypeMatch = url.pathname
+          .toLowerCase()
+          .match(/_([a-z0-9]+)\.onnx$/);
         return {
           modelId: org + "/" + model,
           modelUrl: "https://huggingface.co/" + org + "/" + model,
           directFile: url.pathname.toLowerCase().endsWith(".onnx"),
+          requestedDtype: dtypeMatch ? dtypeMatch[1] : null,
         };
       }
 
@@ -1113,51 +1121,75 @@
         throw new Error("All load attempts failed | " + failures.join(" || "));
       }
 
-      function getOnnxChatLoadAttempts() {
+      function getOnnxChatLoadAttempts(modelType, requestedDtype) {
         const attempts = [];
-        if (navigator.gpu) {
-          attempts.push(
-            {
-              label: "webgpu/q4",
-              options: {
-                dtype: {
-                  embed_tokens: "q4",
-                  vision_encoder: "fp16",
-                  decoder_model_merged: "q4",
+        if (modelType === "qwen3_5") {
+          if (navigator.gpu) {
+            attempts.push(
+              {
+                label: "webgpu/q4",
+                options: {
+                  dtype: {
+                    embed_tokens: "q4",
+                    vision_encoder: "fp16",
+                    decoder_model_merged: "q4",
+                  },
+                  device: "webgpu",
                 },
-                device: "webgpu",
               },
+              {
+                label: "webgpu/default",
+                options: { device: "webgpu" },
+              }
+            );
+          }
+          attempts.push({
+            label: "wasm/q4",
+            options: {
+              dtype: {
+                embed_tokens: "q4",
+                vision_encoder: "fp16",
+                decoder_model_merged: "q4",
+              },
+              device: "wasm",
             },
-            {
-              label: "webgpu/default",
-              options: { device: "webgpu" },
-            }
+          });
+          return attempts;
+        }
+
+        if (navigator.gpu) {
+          const webgpuDtypes = [requestedDtype, "q4f16", "q4"].filter(
+            (dtype, index, values) => dtype && values.indexOf(dtype) === index
           );
+          for (const dtype of webgpuDtypes) {
+            attempts.push({
+              label: "webgpu/" + dtype,
+              options: { dtype, device: "webgpu" },
+            });
+          }
         }
         attempts.push({
           label: "wasm/q4",
-          options: {
-            dtype: {
-              embed_tokens: "q4",
-              vision_encoder: "fp16",
-              decoder_model_merged: "q4",
-            },
-            device: "wasm",
-          },
+          options: { dtype: "q4", device: "wasm" },
         });
         return attempts;
       }
 
       async function loadOnnxChatModelWithFallback(
-        Qwen3_5ForConditionalGeneration,
+        ModelClass,
         modelId,
+        modelType,
+        requestedDtype,
         progressCallback
       ) {
         const failures = [];
-        for (const attempt of getOnnxChatLoadAttempts()) {
+        for (const attempt of getOnnxChatLoadAttempts(
+          modelType,
+          requestedDtype
+        )) {
           try {
             setStatus("Loading ONNX model (" + attempt.label + ")...");
-            const model = await Qwen3_5ForConditionalGeneration.from_pretrained(
+            const model = await ModelClass.from_pretrained(
               modelId,
               { ...attempt.options, progress_callback: progressCallback }
             );
@@ -1182,6 +1214,7 @@
           state.backend = null;
           state.onnxTokenizer = null;
           state.onnxModelId = null;
+          state.onnxModelType = null;
           state.onnxRuntimeLabel = null;
           state.onnxStoppingCriteria = null;
           return;
@@ -1203,6 +1236,7 @@
           state.backend = null;
           state.onnxTokenizer = null;
           state.onnxModelId = null;
+          state.onnxModelType = null;
           state.onnxRuntimeLabel = null;
           state.onnxStoppingCriteria = null;
         }
@@ -1226,6 +1260,8 @@
         }
         configureVisionRuntimeEnv(state.onnxModule);
         const {
+          AutoConfig,
+          AutoModelForCausalLM,
           AutoTokenizer,
           InterruptableStoppingCriteria,
           Qwen3_5ForConditionalGeneration,
@@ -1247,14 +1283,28 @@
           { progress_callback: progressCallback }
         );
 
-        const result = await loadOnnxChatModelWithFallback(
-          Qwen3_5ForConditionalGeneration,
+        setStatus("Reading ONNX model configuration...");
+        const modelConfig = await AutoConfig.from_pretrained(
           modelInfo.modelId,
+          { progress_callback: progressCallback }
+        );
+        const modelType = modelConfig.model_type;
+        const ModelClass =
+          modelType === "qwen3_5"
+            ? Qwen3_5ForConditionalGeneration
+            : AutoModelForCausalLM;
+
+        const result = await loadOnnxChatModelWithFallback(
+          ModelClass,
+          modelInfo.modelId,
+          modelType,
+          modelInfo.requestedDtype,
           progressCallback
         );
         state.model = result.model;
         state.backend = "onnx";
         state.onnxModelId = modelInfo.modelId;
+        state.onnxModelType = modelType;
         state.onnxRuntimeLabel = result.runtimeLabel;
         state.onnxStoppingCriteria = new InterruptableStoppingCriteria();
       }
@@ -1857,6 +1907,8 @@
             base +
             " | runtime=onnx/" +
             (state.onnxRuntimeLabel || "unknown") +
+            " | type=" +
+            (state.onnxModelType || "unknown") +
             " | model=" +
             (state.onnxModelId || "unknown");
           return;
@@ -1975,6 +2027,47 @@
         return await state.model.formatChat(messages, true, patchedTemplate);
       }
 
+      function buildOnnxChatInputs(messages, enableThinking) {
+        if (state.onnxModelType === "lfm2" && !enableThinking) {
+          const rendered = state.onnxTokenizer.apply_chat_template(messages, {
+            add_generation_prompt: false,
+            tokenize: false,
+          });
+          const noThinkBridge =
+            "<|im_start|>assistant\n" +
+            "<think>\n" +
+            "No unnecessary reasoning. Close thinking and answer immediately.\n" +
+            "</think>\n";
+          return state.onnxTokenizer(rendered + noThinkBridge, {
+            add_special_tokens: false,
+          });
+        }
+
+        return state.onnxTokenizer.apply_chat_template(messages, {
+          add_generation_prompt: true,
+          return_dict: true,
+          enable_thinking: enableThinking,
+        });
+      }
+
+      function getOnnxGenerationOptions(enableThinking) {
+        if (state.onnxModelType === "lfm2") {
+          return {
+            do_sample: true,
+            temperature: enableThinking ? 0.1 : 0.2,
+            top_p: 1.0,
+            top_k: enableThinking ? 50 : 80,
+            repetition_penalty: enableThinking ? 1.1 : 1.05,
+          };
+        }
+        return {
+          do_sample: true,
+          temperature: 1.0,
+          top_p: enableThinking ? 0.95 : 1.0,
+          top_k: 20,
+        };
+      }
+
       async function loadModel() {
         const modelUrl = dom.modelUrl.value.trim();
         const nCtx = Number.parseInt(dom.nCtx.value, 10) || 1024;
@@ -2066,6 +2159,7 @@
           state.backend = null;
           state.onnxTokenizer = null;
           state.onnxModelId = null;
+          state.onnxModelType = null;
           state.onnxRuntimeLabel = null;
           state.onnxStoppingCriteria = null;
           updateEnvText();
@@ -2144,19 +2238,12 @@
 
           if (state.backend === "onnx") {
             const { TextStreamer } = state.onnxModule;
-            const inputs = state.onnxTokenizer.apply_chat_template(messages, {
-              add_generation_prompt: true,
-              return_dict: true,
-              enable_thinking: enableThinking,
-            });
+            const inputs = buildOnnxChatInputs(messages, enableThinking);
             state.onnxStoppingCriteria.reset();
             await state.model.generate({
               ...inputs,
-              do_sample: true,
+              ...getOnnxGenerationOptions(enableThinking),
               max_new_tokens: 512,
-              temperature: 1.0,
-              top_p: enableThinking ? 0.95 : 1.0,
-              top_k: 20,
               stopping_criteria: state.onnxStoppingCriteria,
               streamer: new TextStreamer(state.onnxTokenizer, {
                 skip_prompt: true,
