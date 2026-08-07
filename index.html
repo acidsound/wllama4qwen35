@@ -477,6 +477,9 @@
               <option value="https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q5_K_M.gguf">
                 Higher quality (Q5_K_M, ~590MB)
               </option>
+              <option value="https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX">
+                ONNX / WebGPU (Qwen3.5-0.8B)
+              </option>
               <option value="">Custom URL (manual)</option>
             </select>
 
@@ -514,7 +517,10 @@
             <div class="hint">
               Tool demo: ask <code>what time is it?</code> or <code>time now in Asia/Seoul</code><br />
               The page runs local JS tool <code>get_current_time</code> for verification.<br />
-              You can toggle <code>thinking mode</code> before sending messages.
+              You can toggle <code>thinking mode</code> before sending messages.<br />
+              ONNX: paste a Hugging Face model repository URL or a direct
+              <code>.onnx</code> file URL from that repository. Companion tokenizer,
+              config, and graph files are loaded from the same repository.
             </div>
           </aside>
 
@@ -673,6 +679,12 @@
 
       const state = {
         model: null,
+        backend: null,
+        onnxModule: null,
+        onnxTokenizer: null,
+        onnxModelId: null,
+        onnxRuntimeLabel: null,
+        onnxStoppingCriteria: null,
         loaded: false,
         generating: false,
         abortController: null,
@@ -728,6 +740,63 @@
         ).href,
         captureMaxWidth: 800,
       };
+
+      function parseHuggingFaceModelUrl(rawValue) {
+        let url;
+        try {
+          url = new URL((rawValue || "").trim());
+        } catch {
+          throw new Error("ONNX Model URL must be a valid Hugging Face URL.");
+        }
+
+        const host = url.hostname.toLowerCase();
+        if (host !== "huggingface.co" && !host.endsWith(".huggingface.co")) {
+          throw new Error(
+            "Direct .onnx URLs require a Hugging Face model repository so tokenizer and config files can also be loaded."
+          );
+        }
+
+        const segments = url.pathname.split("/").filter(Boolean);
+        if (segments[0] === "models") {
+          segments.shift();
+        }
+        if (
+          segments.length < 2 ||
+          segments[0] === "spaces" ||
+          segments[0] === "datasets"
+        ) {
+          throw new Error(
+            "ONNX Model URL format: https://huggingface.co/{org}/{model}[/resolve/.../*.onnx]"
+          );
+        }
+
+        const org = segments[0];
+        const model = segments[1];
+        return {
+          modelId: org + "/" + model,
+          modelUrl: "https://huggingface.co/" + org + "/" + model,
+          directFile: url.pathname.toLowerCase().endsWith(".onnx"),
+        };
+      }
+
+      function isOnnxModelUrl(rawValue) {
+        const candidate = (rawValue || "").trim();
+        if (!candidate) {
+          return false;
+        }
+        try {
+          const url = new URL(candidate);
+          const segments = url.pathname.split("/").filter(Boolean);
+          const modelSegment =
+            segments[0] === "models" ? segments[2] : segments[1];
+          return (
+            url.pathname.toLowerCase().endsWith(".onnx") ||
+            (modelSegment || "").toLowerCase().endsWith("-onnx")
+          );
+        } catch {
+          return candidate.toLowerCase().endsWith(".onnx");
+        }
+      }
 
       function setActiveTab(tabName) {
         const isWllama = tabName === "wllama";
@@ -1042,6 +1111,152 @@
         }
 
         throw new Error("All load attempts failed | " + failures.join(" || "));
+      }
+
+      function getOnnxChatLoadAttempts() {
+        const attempts = [];
+        if (navigator.gpu) {
+          attempts.push(
+            {
+              label: "webgpu/q4",
+              options: {
+                dtype: {
+                  embed_tokens: "q4",
+                  vision_encoder: "fp16",
+                  decoder_model_merged: "q4",
+                },
+                device: "webgpu",
+              },
+            },
+            {
+              label: "webgpu/default",
+              options: { device: "webgpu" },
+            }
+          );
+        }
+        attempts.push({
+          label: "wasm/q4",
+          options: {
+            dtype: {
+              embed_tokens: "q4",
+              vision_encoder: "fp16",
+              decoder_model_merged: "q4",
+            },
+            device: "wasm",
+          },
+        });
+        return attempts;
+      }
+
+      async function loadOnnxChatModelWithFallback(
+        Qwen3_5ForConditionalGeneration,
+        modelId,
+        progressCallback
+      ) {
+        const failures = [];
+        for (const attempt of getOnnxChatLoadAttempts()) {
+          try {
+            setStatus("Loading ONNX model (" + attempt.label + ")...");
+            const model = await Qwen3_5ForConditionalGeneration.from_pretrained(
+              modelId,
+              { ...attempt.options, progress_callback: progressCallback }
+            );
+            return { model, runtimeLabel: attempt.label };
+          } catch (error) {
+            const detail = describeVisionError(error);
+            failures.push(attempt.label + ": " + detail);
+            pushNativeLog("warn", [
+              "ONNX chat model load attempt failed",
+              attempt.label,
+              detail,
+            ]);
+          }
+        }
+        throw new Error(
+          "All ONNX load attempts failed | " + failures.join(" || ")
+        );
+      }
+
+      async function disposeActiveChatModel() {
+        if (!state.model) {
+          state.backend = null;
+          state.onnxTokenizer = null;
+          state.onnxModelId = null;
+          state.onnxRuntimeLabel = null;
+          state.onnxStoppingCriteria = null;
+          return;
+        }
+        try {
+          if (
+            state.backend === "wllama" &&
+            typeof state.model.exit === "function"
+          ) {
+            await state.model.exit();
+          } else if (
+            state.backend === "onnx" &&
+            typeof state.model.dispose === "function"
+          ) {
+            await state.model.dispose();
+          }
+        } finally {
+          state.model = null;
+          state.backend = null;
+          state.onnxTokenizer = null;
+          state.onnxModelId = null;
+          state.onnxRuntimeLabel = null;
+          state.onnxStoppingCriteria = null;
+        }
+      }
+
+      async function loadOnnxChatModel(modelUrl) {
+        const modelInfo = parseHuggingFaceModelUrl(modelUrl);
+        if (modelInfo.directFile) {
+          pushNativeLog("log", [
+            "Direct .onnx URL normalized to model repository:",
+            modelInfo.modelUrl,
+          ]);
+        }
+        dom.modelUrl.value = modelInfo.modelUrl;
+        syncPresetFromModelUrl();
+
+        setStatus("Importing Transformers.js runtime...");
+        setLoadingProgress(5);
+        if (!state.onnxModule) {
+          state.onnxModule = await import(visionConfig.moduleUrl);
+        }
+        configureVisionRuntimeEnv(state.onnxModule);
+        const {
+          AutoTokenizer,
+          InterruptableStoppingCriteria,
+          Qwen3_5ForConditionalGeneration,
+        } = state.onnxModule;
+
+        const progressCallback = (progress) => {
+          if (Number.isFinite(progress?.progress)) {
+            setLoadingProgress(Math.max(5, Math.min(95, progress.progress)));
+          }
+          if (progress?.file) {
+            setStatus("Downloading ONNX assets: " + progress.file);
+          }
+        };
+
+        setStatus("Loading ONNX tokenizer...");
+        setLoadingProgress(10);
+        state.onnxTokenizer = await AutoTokenizer.from_pretrained(
+          modelInfo.modelId,
+          { progress_callback: progressCallback }
+        );
+
+        const result = await loadOnnxChatModelWithFallback(
+          Qwen3_5ForConditionalGeneration,
+          modelInfo.modelId,
+          progressCallback
+        );
+        state.model = result.model;
+        state.backend = "onnx";
+        state.onnxModelId = modelInfo.modelId;
+        state.onnxRuntimeLabel = result.runtimeLabel;
+        state.onnxStoppingCriteria = new InterruptableStoppingCriteria();
       }
 
       function setVisionStartMode(mode) {
@@ -1532,6 +1747,15 @@
         dom.userInput.disabled = !state.loaded;
         dom.loadBtn.disabled = state.generating;
         dom.enableThinking.disabled = state.generating;
+        const onnxSelected = isOnnxModelUrl(dom.modelUrl.value);
+        const loadedOnnxSelected =
+          state.backend === "onnx" &&
+          dom.modelUrl.value.trim() ===
+            "https://huggingface.co/" + state.onnxModelId;
+        dom.nCtx.disabled =
+          state.generating || onnxSelected || loadedOnnxSelected;
+        dom.nBatch.disabled =
+          state.generating || onnxSelected || loadedOnnxSelected;
       }
 
       function startPendingIndicator(bubble) {
@@ -1555,17 +1779,23 @@
       }
 
       function stopGeneration() {
-        if (!state.generating || !state.abortController) {
+        if (!state.generating) {
           return;
         }
-        if (!state.abortController.signal.aborted) {
-          state.abortController.abort();
-          setStatus("Stopping response...");
+        if (state.backend === "onnx") {
+          state.onnxStoppingCriteria?.interrupt();
         }
+        if (
+          state.abortController &&
+          !state.abortController.signal.aborted
+        ) {
+          state.abortController.abort();
+        }
+        setStatus("Stopping response...");
       }
 
       async function getCtxUsageText() {
-        if (!state.loaded || !state.model) {
+        if (!state.loaded || !state.model || state.backend !== "wllama") {
           return null;
         }
         try {
@@ -1619,6 +1849,16 @@
 
         if (!state.loaded || !state.model) {
           dom.envText.textContent = base + " | runtime=not-loaded";
+          return;
+        }
+
+        if (state.backend === "onnx") {
+          dom.envText.textContent =
+            base +
+            " | runtime=onnx/" +
+            (state.onnxRuntimeLabel || "unknown") +
+            " | model=" +
+            (state.onnxModelId || "unknown");
           return;
         }
 
@@ -1739,6 +1979,7 @@
         const modelUrl = dom.modelUrl.value.trim();
         const nCtx = Number.parseInt(dom.nCtx.value, 10) || 1024;
         const nBatch = Number.parseInt(dom.nBatch.value, 10) || 64;
+        const useOnnx = isOnnxModelUrl(modelUrl);
         if (!modelUrl) {
           setStatus("Model URL is empty.");
           return;
@@ -1752,55 +1993,81 @@
           setStatus("Initializing runtime...");
           setLoadingProgress(0);
 
-          if (state.model) {
-            await state.model.exit();
-          }
+          await disposeActiveChatModel();
 
           state.nativeLogs = [];
           dom.nativeLog.value = "";
-          const nativeLogger = {
-            debug: (...args) => {
-              console.debug(...args);
-              pushNativeLog("debug", args);
-            },
-            log: (...args) => {
-              console.log(...args);
-              pushNativeLog("log", args);
-            },
-            warn: (...args) => {
-              console.warn(...args);
-              pushNativeLog("warn", args);
-            },
-            error: (...args) => {
-              console.error(...args);
-              pushNativeLog("error", args);
-            },
-          };
 
-          state.model = new Wllama(pathConfig, {
-            logger: nativeLogger,
-            suppressNativeLog: false,
-          });
-          const nThreads = Math.max(1, Math.min(8, navigator.hardwareConcurrency || 4));
+          if (useOnnx) {
+            await loadOnnxChatModel(modelUrl);
+          } else {
+            const nativeLogger = {
+              debug: (...args) => {
+                console.debug(...args);
+                pushNativeLog("debug", args);
+              },
+              log: (...args) => {
+                console.log(...args);
+                pushNativeLog("log", args);
+              },
+              warn: (...args) => {
+                console.warn(...args);
+                pushNativeLog("warn", args);
+              },
+              error: (...args) => {
+                console.error(...args);
+                pushNativeLog("error", args);
+              },
+            };
 
-          await state.model.loadModelFromUrl(modelUrl, {
-            n_ctx: nCtx,
-            n_batch: nBatch,
-            n_threads: nThreads,
-            progressCallback: ({ loaded, total }) => {
-              const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
-              setLoadingProgress(percent);
-              setStatus("Downloading model... " + percent + "%");
-            },
-          });
+            state.model = new Wllama(pathConfig, {
+              logger: nativeLogger,
+              suppressNativeLog: false,
+            });
+            state.backend = "wllama";
+            const nThreads = Math.max(
+              1,
+              Math.min(8, navigator.hardwareConcurrency || 4)
+            );
+
+            await state.model.loadModelFromUrl(modelUrl, {
+              n_ctx: nCtx,
+              n_batch: nBatch,
+              n_threads: nThreads,
+              progressCallback: ({ loaded, total }) => {
+                const percent =
+                  total > 0 ? Math.round((loaded / total) * 100) : 0;
+                setLoadingProgress(percent);
+                setStatus("Downloading GGUF model... " + percent + "%");
+              },
+            });
+          }
 
           state.loaded = true;
           updateEnvText();
           setLoadingProgress(100);
-          setStatus("Model loaded. Ready to chat.");
+          setStatus(
+            (state.backend === "onnx" ? "ONNX" : "GGUF") +
+              " model loaded. Ready to chat."
+          );
         } catch (error) {
           console.error(error);
           state.loaded = false;
+          if (state.model) {
+            try {
+              await disposeActiveChatModel();
+            } catch (disposeError) {
+              console.warn(
+                "Failed to dispose model after load error",
+                disposeError
+              );
+            }
+          }
+          state.backend = null;
+          state.onnxTokenizer = null;
+          state.onnxModelId = null;
+          state.onnxRuntimeLabel = null;
+          state.onnxStoppingCriteria = null;
           updateEnvText();
           const baseMessage = error?.message || String(error);
           const hints = [];
@@ -1809,7 +2076,7 @@
               "native action failed before response decode (often OOM / model load failure)."
             );
           }
-          if (modelUrl.includes("/blob/")) {
+          if (!useOnnx && modelUrl.includes("/blob/")) {
             hints.push("use /resolve/main/... URL instead of /blob/.");
           }
           await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1872,30 +2139,62 @@
           }
           messages.push(...state.history);
 
-          const prompt = await formatPromptForChat(messages, enableThinking);
-
-          const chunks = await state.model.createCompletion(prompt, {
-            nPredict: 512,
-            sampling: {
-              temp: 0.7,
-              top_p: 0.9,
-              top_k: 40,
-            },
-            stream: true,
-            useCache: true,
-            abortSignal: state.abortController.signal,
-          });
-
           let finalText = "";
           let gotFirstToken = false;
-          for await (const chunk of chunks) {
-            if (!gotFirstToken) {
-              gotFirstToken = true;
-              stopPendingIndicator();
+
+          if (state.backend === "onnx") {
+            const { TextStreamer } = state.onnxModule;
+            const inputs = state.onnxTokenizer.apply_chat_template(messages, {
+              add_generation_prompt: true,
+              return_dict: true,
+              enable_thinking: enableThinking,
+            });
+            state.onnxStoppingCriteria.reset();
+            await state.model.generate({
+              ...inputs,
+              do_sample: true,
+              max_new_tokens: 512,
+              temperature: 1.0,
+              top_p: enableThinking ? 0.95 : 1.0,
+              top_k: 20,
+              stopping_criteria: state.onnxStoppingCriteria,
+              streamer: new TextStreamer(state.onnxTokenizer, {
+                skip_prompt: true,
+                skip_special_tokens: true,
+                callback_function: (token) => {
+                  if (!gotFirstToken) {
+                    gotFirstToken = true;
+                    stopPendingIndicator();
+                  }
+                  finalText += token;
+                  assistantBubble.textContent = finalText;
+                  scrollChatToBottom();
+                },
+              }),
+            });
+          } else {
+            const prompt = await formatPromptForChat(messages, enableThinking);
+            const chunks = await state.model.createCompletion(prompt, {
+              nPredict: 512,
+              sampling: {
+                temp: 0.7,
+                top_p: 0.9,
+                top_k: 40,
+              },
+              stream: true,
+              useCache: true,
+              abortSignal: state.abortController.signal,
+            });
+
+            for await (const chunk of chunks) {
+              if (!gotFirstToken) {
+                gotFirstToken = true;
+                stopPendingIndicator();
+              }
+              finalText = chunk.currentText ?? finalText;
+              assistantBubble.textContent = finalText;
+              scrollChatToBottom();
             }
-            finalText = chunk.currentText ?? finalText;
-            assistantBubble.textContent = finalText;
-            scrollChatToBottom();
           }
 
           stopPendingIndicator();
@@ -1968,9 +2267,16 @@
         }
         dom.modelUrl.value = dom.modelPreset.value;
         setStatus("Preset selected. Click Load Model.");
+        syncUiState();
       });
-      dom.modelUrl.addEventListener("input", syncPresetFromModelUrl);
-      dom.modelUrl.addEventListener("change", syncPresetFromModelUrl);
+      dom.modelUrl.addEventListener("input", () => {
+        syncPresetFromModelUrl();
+        syncUiState();
+      });
+      dom.modelUrl.addEventListener("change", () => {
+        syncPresetFromModelUrl();
+        syncUiState();
+      });
       dom.userInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
           event.preventDefault();
@@ -2076,4 +2382,3 @@
     </script>
   </body>
 </html>
-
