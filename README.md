@@ -143,7 +143,7 @@ https://huggingface.co/acidsound/LFM2.5-2.6B-Uncensored-ONNX/resolve/main/onnx/m
 
 A direct `.onnx` URL is normalized to its parent model repository because chat inference also requires the repository's tokenizer, config, and companion graph files. Do not enter the `.onnx_data` URL separately; Transformers.js downloads external data files according to `transformers.js_config.use_external_data_format` in `config.json`. Arbitrary standalone `.onnx` files and non-Hugging-Face URLs are not supported.
 
-The loader reads `model_type` and uses the Qwen3.5 conditional-generation class or generic `AutoModelForCausalLM` as appropriate. Decoder-only models try the explicitly requested dtype, WebGPU `q4f16`, WebGPU `q4`, and then WASM `q4`. The `n_ctx` and `n_batch` controls apply only to GGUF/wllama models.
+The loader reads `model_type` and uses the Qwen3.5 conditional-generation class or generic `AutoModelForCausalLM` as appropriate. Decoder-only models try the explicitly requested dtype, WebGPU `q4f16`, WebGPU `q4`, and then WASM `q4`. The `n_ctx` and `n_batch` controls apply only to GGUF/wllama models. **Max Output Tokens** is shared by both backends: it maps to `max_new_tokens` for ONNX and `nPredict` for GGUF, and can be adjusted from 1 to 32768 tokens (subject to the model context window and available browser memory).
 
 For one external data file named `model_q4f16.onnx_data`, its `config.json` entry must declare one chunk:
 
